@@ -7,6 +7,7 @@ import '../models/expense.dart';
 import '../models/household.dart';
 import '../models/rent_entry.dart';
 import '../models/user_model.dart';
+import 'xp_service.dart';
 
 /// Generic Firestore helpers for the household's feature sub-collections.
 ///
@@ -47,6 +48,7 @@ class FirestoreService {
 
   Future<void> markRentPaid(String householdId, String entryId) async {
     await _rent(householdId).doc(entryId).update({'isFullyPaid': true});
+    await XpService().awardRentPaidOnTime(_uid, householdId);
   }
 
   // ─── Expenses ──────────────────────────────────────────────────────────────
@@ -63,7 +65,13 @@ class FirestoreService {
   }
 
   Future<void> settleExpense(String householdId, String expenseId) async {
+    final doc = await _expenses(householdId).doc(expenseId).get();
+    final paidById =
+        doc.exists ? (doc.data() as Map<String, dynamic>)['paidById'] as String? : null;
     await _expenses(householdId).doc(expenseId).update({'isSettled': true});
+    if (paidById != null) {
+      await XpService().awardExpensePaid(paidById, householdId);
+    }
   }
 
   Future<void> deleteExpense(String householdId, String expenseId) async {
@@ -88,10 +96,21 @@ class FirestoreService {
     String choreId,
     bool isCompleted,
   ) async {
+    String? assignedToId;
+    if (isCompleted) {
+      final doc = await _chores(householdId).doc(choreId).get();
+      if (doc.exists) {
+        assignedToId =
+            (doc.data() as Map<String, dynamic>)['assignedToId'] as String?;
+      }
+    }
     await _chores(householdId).doc(choreId).update({
       'isCompleted': isCompleted,
       'completedAt': isCompleted ? Timestamp.now() : null,
     });
+    if (isCompleted && assignedToId != null) {
+      await XpService().awardChoreCompleted(assignedToId, householdId);
+    }
   }
 
   Future<void> deleteChore(String householdId, String choreId) async {

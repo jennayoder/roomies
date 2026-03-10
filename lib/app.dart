@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'services/auth_service.dart';
+import 'services/theme_notifier.dart';
 import 'widgets/main_scaffold.dart';
 
 class RoomiesApp extends StatelessWidget {
@@ -12,6 +13,8 @@ class RoomiesApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final seedColor = context.watch<ThemeNotifier>().seedColor;
+
     return MaterialApp(
       title: 'Roomies',
       debugShowCheckedModeBanner: false,
@@ -20,7 +23,7 @@ class RoomiesApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6750A4), // M3 default purple
+          seedColor: seedColor,
           brightness: Brightness.light,
         ),
         textTheme: GoogleFonts.interTextTheme(
@@ -30,7 +33,7 @@ class RoomiesApp extends StatelessWidget {
       darkTheme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6750A4),
+          seedColor: seedColor,
           brightness: Brightness.dark,
         ),
         textTheme: GoogleFonts.interTextTheme(

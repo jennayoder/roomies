@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
+import 'services/theme_notifier.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,9 +16,13 @@ void main() async {
   );
 
   runApp(
-    // Provide AuthService at the root so every widget can access it.
-    ChangeNotifierProvider(
-      create: (_) => AuthService(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(
+          create: (_) => ThemeNotifier(const Color(0xFF6750A4)),
+        ),
+      ],
       child: const RoomiesApp(),
     ),
   );

@@ -1,16 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/household.dart';
+import '../models/level_system.dart';
 import '../models/user_model.dart';
 import '../screens/chores/chores_screen.dart';
 import '../screens/events/events_screen.dart';
 import '../screens/expenses/expenses_screen.dart';
 import '../screens/home/home_screen.dart';
+import '../screens/leaderboard/leaderboard_screen.dart';
 import '../screens/members/members_screen.dart';
+import '../screens/profile/profile_screen.dart';
 import '../screens/rent/rent_screen.dart';
+import '../screens/tasks/personal_tasks_screen.dart';
 import '../services/auth_service.dart';
 import '../services/household_service.dart';
+import '../services/theme_notifier.dart';
+import '../services/xp_service.dart';
 
 /// Pairs a [NavigationDestination] with the index into [_allPages].
 class _Tab {
@@ -22,9 +30,9 @@ class _Tab {
 /// The main app shell with a role-aware [NavigationBar].
 ///
 /// Tabs shown depend on the current user's [HouseholdRole]:
-/// - owner/renter: Home, Rent, Expenses, Chores, Events, Members
-/// - princess:     Home, Expenses, Chores, Events, Members
-/// - guest:        Home, Events, Members
+/// - owner/renter: Home, Rent, Expenses, Chores, Events, Members, Leaderboard, Tasks, Profile
+/// - princess:     Home, Expenses, Chores, Events, Members, Leaderboard, Tasks, Profile
+/// - guest:        Home, Events, Members, Leaderboard, Profile
 /// - no household: all tabs shown (each screen handles the empty state)
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -34,18 +42,105 @@ class MainScaffold extends StatefulWidget {
 }
 
 class _MainScaffoldState extends State<MainScaffold> {
-  /// Index within the currently visible tab list (NOT the page index).
   int _selectedIndex = 0;
 
   /// All possible pages — always in the [IndexedStack] to preserve state.
   static const List<Widget> _allPages = [
-    HomeScreen(),      // page 0
-    RentScreen(),      // page 1
-    ExpensesScreen(),  // page 2
-    ChoresScreen(),    // page 3
-    EventsScreen(),    // page 4
-    MembersScreen(),   // page 5
+    HomeScreen(),          // 0
+    RentScreen(),          // 1
+    ExpensesScreen(),      // 2
+    ChoresScreen(),        // 3
+    EventsScreen(),        // 4
+    MembersScreen(),       // 5
+    LeaderboardScreen(),   // 6
+    PersonalTasksScreen(), // 7
+    ProfileScreen(),       // 8
   ];
+
+  StreamSubscription<UserModel?>? _profileSub;
+
+  /// Tracks level-ups we've already shown this session to avoid re-showing.
+  final _shownLevelUps = <int>{};
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _profileSub?.cancel();
+    final auth = context.read<AuthService>();
+    _profileSub = auth.userProfileStream().listen((user) {
+      if (!mounted) return;
+
+      // Apply persisted theme when profile first loads.
+      if (user?.currentTheme != null) {
+        final color = LevelSystem.hexToColor(user!.currentTheme!);
+        context.read<ThemeNotifier>().setSeedColor(color);
+      }
+
+      // Show level-up dialog if there's a pending level-up.
+      final pending = user?.pendingLevelUp;
+      if (pending != null && !_shownLevelUps.contains(pending)) {
+        _shownLevelUps.add(pending);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showLevelUpDialog(pending, user!);
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _profileSub?.cancel();
+    super.dispose();
+  }
+
+  void _showLevelUpDialog(int newLevel, UserModel user) {
+    final uid = context.read<AuthService>().currentUser?.uid;
+    if (uid == null) return;
+
+    // Clear the flag so it isn't shown again after a hot-restart or re-login.
+    XpService().clearPendingLevelUp(uid);
+
+    final info = LevelSystem.infoFor(newLevel);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: Text(info.emoji, style: const TextStyle(fontSize: 48)),
+        title: const Text('Level Up!'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'You reached Level $newLevel',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              info.title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              textAlign: TextAlign.center,
+            ),
+            if (newLevel < LevelSystem.maxLevel) ...[
+              const SizedBox(height: 12),
+              Text(
+                '🎨 New avatar & theme color unlocked!\nCheck your Profile to equip them.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Awesome! 🎉'),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// Builds the visible tab list for the given [role].
   List<_Tab> _buildTabs(HouseholdRole? role) {
@@ -60,7 +155,7 @@ class _MainScaffoldState extends State<MainScaffold> {
       ),
     ];
 
-    // Rent: owner and renter only (hidden for princess, guest, no-household).
+    // Rent: owner and renter only.
     if (role == null ||
         role == HouseholdRole.owner ||
         role == HouseholdRole.renter) {
@@ -112,6 +207,38 @@ class _MainScaffoldState extends State<MainScaffold> {
       5,
     ));
 
+    // Leaderboard: everyone.
+    tabs.add(const _Tab(
+      NavigationDestination(
+        icon: Icon(Icons.emoji_events_outlined),
+        selectedIcon: Icon(Icons.emoji_events),
+        label: 'Rankings',
+      ),
+      6,
+    ));
+
+    // Tasks: everyone except guests.
+    if (role == null || role != HouseholdRole.guest) {
+      tabs.add(const _Tab(
+        NavigationDestination(
+          icon: Icon(Icons.task_alt_outlined),
+          selectedIcon: Icon(Icons.task_alt),
+          label: 'Tasks',
+        ),
+        7,
+      ));
+    }
+
+    // Profile: always.
+    tabs.add(const _Tab(
+      NavigationDestination(
+        icon: Icon(Icons.person_outlined),
+        selectedIcon: Icon(Icons.person),
+        label: 'Profile',
+      ),
+      8,
+    ));
+
     return tabs;
   }
 
@@ -119,14 +246,12 @@ class _MainScaffoldState extends State<MainScaffold> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
 
-    // Watch the user profile to get householdId and then the household role.
     return StreamBuilder<UserModel?>(
       stream: auth.userProfileStream(),
       builder: (context, userSnap) {
         final householdId = userSnap.data?.householdId;
 
         if (householdId == null) {
-          // Not in a household yet — show all tabs (screens handle empty state).
           return _buildScaffold(null);
         }
 
@@ -143,8 +268,6 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   Widget _buildScaffold(HouseholdRole? role) {
     final tabs = _buildTabs(role);
-
-    // Clamp selected index in case tabs changed (e.g. role downgrade).
     final safeIndex = _selectedIndex.clamp(0, tabs.length - 1);
     final pageIndex = tabs[safeIndex].pageIndex;
 
