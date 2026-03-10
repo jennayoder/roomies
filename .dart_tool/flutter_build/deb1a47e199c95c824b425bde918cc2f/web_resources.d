@@ -1,0 +1,1 @@
+ /home/moneymaker/Projects/roomies/build/web/manifest.json:  /home/moneymaker/Projects/roomies/web/manifest.json /home/moneymaker/Projects/roomies/web/index.html
