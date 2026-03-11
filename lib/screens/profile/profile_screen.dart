@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/theme_notifier.dart';
 import '../../services/xp_service.dart';
 import '../../widgets/loading_widget.dart';
+import '../leaderboard/leaderboard_screen.dart';
 
 /// Profile tab — shows avatar, XP progress, trophy case, and pickers for
 /// avatar and theme color.
@@ -137,6 +138,36 @@ class _ProfileContent extends StatelessWidget {
                               ),
                         ),
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Leaderboard shortcut ─────────────────────────────────────────────
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Icon(Icons.emoji_events,
+                        color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'View Leaderboard',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                    Icon(Icons.chevron_right,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ],
+                ),
               ),
             ),
           ),

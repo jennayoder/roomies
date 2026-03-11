@@ -4,3 +4,6 @@
 firebase-debug.log
 node_modules/
 package-lock.json
+
+# Firebase config (contains API keys)
+lib/firebase_options.dart

@@ -10,11 +10,7 @@ import '../screens/chores/chores_screen.dart';
 import '../screens/events/events_screen.dart';
 import '../screens/expenses/expenses_screen.dart';
 import '../screens/home/home_screen.dart';
-import '../screens/leaderboard/leaderboard_screen.dart';
-import '../screens/members/members_screen.dart';
 import '../screens/profile/profile_screen.dart';
-import '../screens/rent/rent_screen.dart';
-import '../screens/tasks/personal_tasks_screen.dart';
 import '../services/auth_service.dart';
 import '../services/household_service.dart';
 import '../services/theme_notifier.dart';
@@ -30,9 +26,9 @@ class _Tab {
 /// The main app shell with a role-aware [NavigationBar].
 ///
 /// Tabs shown depend on the current user's [HouseholdRole]:
-/// - owner/renter: Home, Rent, Expenses, Chores, Events, Members, Leaderboard, Tasks, Profile
-/// - princess:     Home, Expenses, Chores, Events, Members, Leaderboard, Tasks, Profile
-/// - guest:        Home, Events, Members, Leaderboard, Profile
+/// - owner/renter: Home, Expenses, Chores+Tasks, Events, Profile
+/// - princess:     Home, Expenses, Chores+Tasks, Events, Profile
+/// - guest:        Home, Events, Profile
 /// - no household: all tabs shown (each screen handles the empty state)
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -44,18 +40,19 @@ class MainScaffold extends StatefulWidget {
 class _MainScaffoldState extends State<MainScaffold> {
   int _selectedIndex = 0;
 
-  /// All possible pages — always in the [IndexedStack] to preserve state.
-  static const List<Widget> _allPages = [
-    HomeScreen(),          // 0
-    RentScreen(),          // 1
-    ExpensesScreen(),      // 2
-    ChoresScreen(),        // 3
-    EventsScreen(),        // 4
-    MembersScreen(),       // 5
-    LeaderboardScreen(),   // 6
-    PersonalTasksScreen(), // 7
-    ProfileScreen(),       // 8
+  void _switchTab(int index) => setState(() => _selectedIndex = index);
+
+  /// All possible pages — built with tab-switch callback for HomeScreen.
+  List<Widget> get _allPages => [
+    HomeScreen(onSwitchTab: _switchTab), // 0
+    ExpensesScreen(),                    // 1
+    ChoresScreen(),                      // 2
+    EventsScreen(),                      // 3
+    ProfileScreen(),                     // 4
   ];
+
+  /// Pages that have been visited at least once and should be kept alive.
+  final _visitedPages = <int>{};
 
   StreamSubscription<UserModel?>? _profileSub;
 
@@ -155,20 +152,6 @@ class _MainScaffoldState extends State<MainScaffold> {
       ),
     ];
 
-    // Rent: owner and renter only.
-    if (role == null ||
-        role == HouseholdRole.owner ||
-        role == HouseholdRole.renter) {
-      tabs.add(const _Tab(
-        NavigationDestination(
-          icon: Icon(Icons.receipt_long_outlined),
-          selectedIcon: Icon(Icons.receipt_long),
-          label: 'Rent',
-        ),
-        1,
-      ));
-    }
-
     // Expenses + Chores: everyone except guests.
     if (role == null || role != HouseholdRole.guest) {
       tabs.add(const _Tab(
@@ -177,7 +160,7 @@ class _MainScaffoldState extends State<MainScaffold> {
           selectedIcon: Icon(Icons.account_balance_wallet),
           label: 'Expenses',
         ),
-        2,
+        1,
       ));
       tabs.add(const _Tab(
         NavigationDestination(
@@ -185,49 +168,19 @@ class _MainScaffoldState extends State<MainScaffold> {
           selectedIcon: Icon(Icons.checklist),
           label: 'Chores',
         ),
-        3,
+        2,
       ));
     }
 
-    // Events and Members: everyone.
+    // Events: everyone.
     tabs.add(const _Tab(
       NavigationDestination(
         icon: Icon(Icons.event_outlined),
         selectedIcon: Icon(Icons.event),
         label: 'Events',
       ),
-      4,
+      3,
     ));
-    tabs.add(const _Tab(
-      NavigationDestination(
-        icon: Icon(Icons.people_outlined),
-        selectedIcon: Icon(Icons.people),
-        label: 'Members',
-      ),
-      5,
-    ));
-
-    // Leaderboard: everyone.
-    tabs.add(const _Tab(
-      NavigationDestination(
-        icon: Icon(Icons.emoji_events_outlined),
-        selectedIcon: Icon(Icons.emoji_events),
-        label: 'Rankings',
-      ),
-      6,
-    ));
-
-    // Tasks: everyone except guests.
-    if (role == null || role != HouseholdRole.guest) {
-      tabs.add(const _Tab(
-        NavigationDestination(
-          icon: Icon(Icons.task_alt_outlined),
-          selectedIcon: Icon(Icons.task_alt),
-          label: 'Tasks',
-        ),
-        7,
-      ));
-    }
 
     // Profile: always.
     tabs.add(const _Tab(
@@ -236,7 +189,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         selectedIcon: Icon(Icons.person),
         label: 'Profile',
       ),
-      8,
+      4,
     ));
 
     return tabs;
@@ -271,10 +224,16 @@ class _MainScaffoldState extends State<MainScaffold> {
     final safeIndex = _selectedIndex.clamp(0, tabs.length - 1);
     final pageIndex = tabs[safeIndex].pageIndex;
 
+    // Mark this page as visited so it gets built.
+    _visitedPages.add(pageIndex);
+
     return Scaffold(
       body: IndexedStack(
         index: pageIndex,
-        children: _allPages,
+        children: List.generate(_allPages.length, (i) {
+          if (!_visitedPages.contains(i)) return const SizedBox.shrink();
+          return _allPages[i];
+        }),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: safeIndex,

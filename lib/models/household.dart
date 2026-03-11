@@ -7,7 +7,7 @@ enum HouseholdRole { owner, renter, princess, guest }
 extension HouseholdRoleX on HouseholdRole {
   String get displayName => switch (this) {
         HouseholdRole.owner => 'Owner',
-        HouseholdRole.renter => 'Renter',
+        HouseholdRole.renter => 'Roomie',
         HouseholdRole.princess => 'Princess',
         HouseholdRole.guest => 'Guest',
       };

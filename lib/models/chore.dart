@@ -33,6 +33,9 @@ class Chore {
 
   final DateTime createdAt;
 
+  /// XP awarded when this chore is completed. Defaults to 25.
+  final int xpReward;
+
   const Chore({
     required this.id,
     required this.title,
@@ -43,6 +46,7 @@ class Chore {
     this.isCompleted = false,
     this.completedAt,
     required this.createdAt,
+    this.xpReward = 25,
   });
 
   // ─── Firestore serialization ───────────────────────────────────────────────
@@ -66,6 +70,7 @@ class Chore {
           ? (data['completedAt'] as Timestamp).toDate()
           : null,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
+      xpReward: (data['xpReward'] as int?) ?? 25,
     );
   }
 
@@ -79,6 +84,7 @@ class Chore {
         'completedAt':
             completedAt != null ? Timestamp.fromDate(completedAt!) : null,
         'createdAt': Timestamp.fromDate(createdAt),
+        'xpReward': xpReward,
       };
 
   Chore copyWith({
@@ -96,5 +102,6 @@ class Chore {
         isCompleted: isCompleted ?? this.isCompleted,
         completedAt: completedAt ?? this.completedAt,
         createdAt: createdAt,
+        xpReward: xpReward,
       );
 }

@@ -104,13 +104,29 @@ class FirestoreService {
             (doc.data() as Map<String, dynamic>)['assignedToId'] as String?;
       }
     }
+    int xpReward = 25;
+    String? choreTitle;
+    if (isCompleted) {
+      final doc = await _chores(householdId).doc(choreId).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        assignedToId ??= data['assignedToId'] as String?;
+        xpReward = (data['xpReward'] as int?) ?? 25;
+        choreTitle = data['title'] as String?;
+      }
+    }
     await _chores(householdId).doc(choreId).update({
       'isCompleted': isCompleted,
       'completedAt': isCompleted ? Timestamp.now() : null,
     });
     if (isCompleted && assignedToId != null) {
-      await XpService().awardChoreCompleted(assignedToId, householdId);
+      await XpService().awardChoreCompleted(assignedToId, householdId,
+          xp: xpReward, choreTitle: choreTitle);
     }
+  }
+
+  Future<void> claimChore(String householdId, String choreId, String uid) async {
+    await _chores(householdId).doc(choreId).update({'assignedToId': uid});
   }
 
   Future<void> deleteChore(String householdId, String choreId) async {
@@ -165,11 +181,26 @@ class FirestoreService {
     );
 
     final result = <(UserModel, HouseholdRole)>[];
-    for (final snap in profiles) {
+    for (int i = 0; i < profiles.length; i++) {
+      final snap = profiles[i];
+      final uid = household.memberIds[i];
+      final role = household.members[uid];
+      if (role == null) continue;
+
       if (snap.exists) {
-        final user = UserModel.fromDoc(snap);
-        final role = household.members[user.uid];
-        if (role != null) result.add((user, role));
+        result.add((UserModel.fromDoc(snap), role));
+      } else {
+        // User doc missing — create a stub so they still show up,
+        // and write a real doc so it's fixed for next time.
+        final stub = UserModel(
+          uid: uid,
+          displayName: 'Member',
+          email: '',
+          createdAt: DateTime.now(),
+        );
+        // Write stub silently in background
+        _db.collection('users').doc(uid).set(stub.toMap());
+        result.add((stub, role));
       }
     }
     return result;

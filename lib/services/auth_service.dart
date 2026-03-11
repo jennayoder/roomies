@@ -68,7 +68,25 @@ class AuthService extends ChangeNotifier {
     required String email,
     required String password,
   }) async {
-    await _auth.signInWithEmailAndPassword(email: email, password: password);
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    // Ensure a Firestore user doc exists (creates one if missing).
+    final uid = credential.user!.uid;
+    final doc = await _db.collection('users').doc(uid).get();
+    if (!doc.exists) {
+      final displayName = credential.user!.displayName ??
+          credential.user!.email?.split('@').first ??
+          'User';
+      final profile = UserModel(
+        uid: uid,
+        displayName: displayName,
+        email: credential.user!.email ?? '',
+        createdAt: DateTime.now(),
+      );
+      await _db.collection('users').doc(uid).set(profile.toMap());
+    }
   }
 
   // ─── Sign out ──────────────────────────────────────────────────────────────

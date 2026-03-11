@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -8,8 +10,31 @@ import 'services/auth_service.dart';
 import 'services/theme_notifier.dart';
 import 'widgets/main_scaffold.dart';
 
-class RoomiesApp extends StatelessWidget {
+class RoomiesApp extends StatefulWidget {
   const RoomiesApp({super.key});
+
+  @override
+  State<RoomiesApp> createState() => _RoomiesAppState();
+}
+
+class _RoomiesAppState extends State<RoomiesApp> {
+  /// Only show the loading splash after 300 ms — avoids flicker on fast loads.
+  bool _showSplash = false;
+  Timer? _splashTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _splashTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _showSplash = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _splashTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,15 +78,34 @@ class RoomiesApp extends StatelessWidget {
       home: Consumer<AuthService>(
         builder: (context, auth, _) {
           if (auth.isLoading) {
-            // Splash / loading state while Firebase Auth resolves
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
+            // Only show branded splash after 300 ms — skip it on fast loads.
+            if (!_showSplash) return const Scaffold(body: SizedBox.shrink());
+            return const _SplashScreen();
           }
           return auth.currentUser != null
               ? const MainScaffold()
               : const LoginScreen();
         },
+      ),
+    );
+  }
+}
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: Center(
+        child: Text(
+          'Roomies',
+          style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: colors.primary,
+              ),
+        ),
       ),
     );
   }

@@ -23,11 +23,11 @@ class LevelInfo {
 class LevelSystem {
   static const List<LevelInfo> levels = [
     LevelInfo(level: 1, xpRequired: 0,    title: 'Couch Surfer',    emoji: '🛋️', avatarEmoji: '🛋️', themeColor: Color(0xFF9E9E9E)),
-    LevelInfo(level: 2, xpRequired: 200,  title: 'Roomie',          emoji: '🔑', avatarEmoji: '🔑', themeColor: Color(0xFF6750A4)),
-    LevelInfo(level: 3, xpRequired: 500,  title: 'Reliable Roomie', emoji: '✅', avatarEmoji: '✅', themeColor: Color(0xFF00897B)),
+    LevelInfo(level: 2, xpRequired: 200,  title: 'Roomie',          emoji: '🔑', avatarEmoji: '🐸', themeColor: Color(0xFF6750A4)),
+    LevelInfo(level: 3, xpRequired: 500,  title: 'Reliable Roomie', emoji: '✅', avatarEmoji: '🦆', themeColor: Color(0xFF00897B)),
     LevelInfo(level: 4, xpRequired: 1000, title: 'Household Hero',  emoji: '🦸', avatarEmoji: '🦸', themeColor: Color(0xFF1565C0)),
-    LevelInfo(level: 5, xpRequired: 2000, title: 'House Champion',  emoji: '👑', avatarEmoji: '👑', themeColor: Color(0xFFF57F17)),
-    LevelInfo(level: 6, xpRequired: 3500, title: 'Legend',          emoji: '🌟', avatarEmoji: '🌟', themeColor: Color(0xFFAD1457)),
+    LevelInfo(level: 5, xpRequired: 2000, title: 'House Champion',  emoji: '👑', avatarEmoji: '🦩', themeColor: Color(0xFFF57F17)),
+    LevelInfo(level: 6, xpRequired: 3500, title: 'Legend',          emoji: '🌟', avatarEmoji: '🐉', themeColor: Color(0xFFAD1457)),
     LevelInfo(level: 7, xpRequired: 5000, title: 'Hall of Fame',    emoji: '🏆', avatarEmoji: '🏆', themeColor: Color(0xFFBF360C)),
   ];
 
@@ -70,9 +70,28 @@ class LevelSystem {
     return xpForNextLevel(currentLevel)! - totalXp;
   }
 
+  /// Extra avatar pool — always available + more unlocked at higher levels.
+  static const List<String> _baseAvatars = [
+    '😊', '😎', '🤓', '🥳', '😴', // Normal-ish
+    '🐸', '🦆', '🐧', '🦦', '🐨', // Cute animals
+    '🦄', '🐲', '🦖', '🦑', '🐡', // Weird/chaotic
+    '🧙', '🧜', '🧝', '🤖', '👻', // Fantasy/fun
+  ];
+  static const List<String> _bonusAvatars = [
+    '🌮', '🍕', '🧃', '🥐', '🫙', // Stupid food ones
+    '🛸', '🪩', '🎸', '🎺', '🪗', // Random objects
+    '🦧', '🦭', '🦬', '🐊', '🦎', // Chaotic animals
+  ];
+
   /// Returns all avatar emojis unlocked through [level].
-  static List<String> avatarsUnlockedAt(int level) =>
-      levels.where((l) => l.level <= level).map((l) => l.avatarEmoji).toList();
+  static List<String> avatarsUnlockedAt(int level) {
+    final fromLevels = levels
+        .where((l) => l.level <= level)
+        .map((l) => l.avatarEmoji)
+        .toList();
+    final bonus = level >= 3 ? _bonusAvatars : <String>[];
+    return {..._baseAvatars, ...fromLevels, ...bonus}.toList();
+  }
 
   /// Returns all theme colors unlocked through [level].
   static List<Color> themesUnlockedAt(int level) =>

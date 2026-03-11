@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/household.dart';
+import '../../models/level_system.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/household_service.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_widget.dart';
+import 'member_detail_screen.dart';
 
 /// Lists all household members with their roles.
 ///
@@ -201,6 +203,11 @@ class _MembersScreenState extends State<MembersScreen> {
                             role: role,
                             isCurrentUser: isMe,
                             isOwner: isOwner,
+                            onTap: () => _showMemberDetail(
+                              context,
+                              member: member,
+                              role: role,
+                            ),
                             onChangeRole: isOwner
                                 ? () => _changeRole(
                                       context,
@@ -230,6 +237,137 @@ class _MembersScreenState extends State<MembersScreen> {
         },
       ),
     );
+  }
+
+  void _showMemberDetail(
+    BuildContext context, {
+    required UserModel member,
+    required HouseholdRole role,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MemberDetailScreen(user: member, role: role),
+      ),
+    );
+  }
+}
+
+// ─── Member detail bottom sheet ───────────────────────────────────────────────
+
+class _MemberDetailSheet extends StatelessWidget {
+  final UserModel member;
+  final HouseholdRole role;
+
+  const _MemberDetailSheet({required this.member, required this.role});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final levelInfo = LevelSystem.infoFor(member.level);
+    final avatarEmoji = member.currentAvatar ?? levelInfo.avatarEmoji;
+    final progress = LevelSystem.progressToNextLevel(member.totalXp, member.level);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+              color: colors.onSurfaceVariant.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // Big avatar
+          CircleAvatar(
+            radius: 48,
+            backgroundColor: colors.primaryContainer,
+            child: Text(avatarEmoji, style: const TextStyle(fontSize: 46)),
+          ),
+          const SizedBox(height: 16),
+
+          // Name
+          Text(
+            member.displayName,
+            style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+
+          // Role badge
+          _RoleBadge(role: role, tappable: false),
+          const SizedBox(height: 16),
+
+          // Level + XP card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Level ${member.level} — ${levelInfo.emoji} ${member.title ?? levelInfo.title}',
+                        style: textTheme.titleSmall,
+                      ),
+                      Text(
+                        '${member.totalXp} XP',
+                        style: textTheme.titleSmall?.copyWith(
+                          color: colors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 10,
+                      backgroundColor: colors.surfaceContainerHighest,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Joined date
+          Row(
+            children: [
+              Icon(Icons.calendar_today_outlined,
+                  size: 16, color: colors.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Text(
+                'Joined ${_formatDate(member.createdAt)}',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
 }
 
@@ -321,6 +459,7 @@ class _MemberTile extends StatelessWidget {
   final HouseholdRole role;
   final bool isCurrentUser;
   final bool isOwner;
+  final VoidCallback onTap;
   final VoidCallback? onChangeRole;
   final VoidCallback? onRemove;
 
@@ -329,6 +468,7 @@ class _MemberTile extends StatelessWidget {
     required this.role,
     required this.isCurrentUser,
     required this.isOwner,
+    required this.onTap,
     this.onChangeRole,
     this.onRemove,
   });
@@ -339,97 +479,100 @@ class _MemberTile extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final avatarColor =
         Color(int.parse(member.avatarColor.replaceFirst('#', 'FF'), radix: 16));
+    final levelInfo = LevelSystem.infoFor(member.level);
+    final avatarEmoji = member.currentAvatar ?? levelInfo.avatarEmoji;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              // Avatar circle
-              CircleAvatar(
-                backgroundColor: avatarColor,
-                foregroundColor: Colors.white,
-                radius: 22,
-                child: Text(
-                  member.displayName.isNotEmpty
-                      ? member.displayName[0].toUpperCase()
-                      : '?',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                // Avatar circle with emoji
+                CircleAvatar(
+                  backgroundColor: avatarColor,
+                  foregroundColor: Colors.white,
+                  radius: 22,
+                  child: Text(
+                    avatarEmoji,
+                    style: const TextStyle(fontSize: 20),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
+                const SizedBox(width: 12),
 
-              // Name + email
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            member.displayName,
-                            style: textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (isCurrentUser) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: colors.secondaryContainer,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                // Name + level title
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
                             child: Text(
-                              'You',
-                              style: textTheme.labelSmall?.copyWith(
-                                color: colors.onSecondaryContainer,
+                              member.displayName,
+                              style: textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isCurrentUser) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: colors.secondaryContainer,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'You',
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: colors.onSecondaryContainer,
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
-                    ),
-                    Text(
-                      member.email,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
                       ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                      Text(
+                        '${levelInfo.emoji} ${member.title ?? levelInfo.title} · ${role.displayName}',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
 
-              const SizedBox(width: 8),
+                const SizedBox(width: 8),
 
-              // Role badge (tappable by owner to change)
-              if (isOwner && !isCurrentUser)
-                InkWell(
-                  onTap: onChangeRole,
-                  borderRadius: BorderRadius.circular(20),
-                  child: _RoleBadge(role: role, tappable: true),
-                )
-              else
-                _RoleBadge(role: role, tappable: false),
+                // Role badge (tappable by owner to change)
+                if (isOwner && !isCurrentUser)
+                  InkWell(
+                    onTap: onChangeRole,
+                    borderRadius: BorderRadius.circular(20),
+                    child: _RoleBadge(role: role, tappable: true),
+                  )
+                else
+                  _RoleBadge(role: role, tappable: false),
 
-              // Remove button (owner only, not self)
-              if (onRemove != null) ...[
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: Icon(Icons.person_remove_outlined,
-                      color: colors.error, size: 20),
-                  tooltip: 'Remove member',
-                  onPressed: onRemove,
-                ),
+                // Remove button (owner only, not self)
+                if (onRemove != null) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: Icon(Icons.person_remove_outlined,
+                        color: colors.error, size: 20),
+                    tooltip: 'Remove member',
+                    onPressed: onRemove,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

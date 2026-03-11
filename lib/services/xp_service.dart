@@ -14,22 +14,25 @@ class XpService {
   static const int _choreCompletedXp = 50;
 
   Future<void> awardRentPaidOnTime(String uid, String householdId) =>
-      _addXp(uid, _rentOnTimeXp);
+      _addXp(uid, _rentOnTimeXp, source: 'rent', description: 'Paid rent on time 🏠');
 
   Future<void> awardExpensePaid(String uid, String householdId) =>
-      _addXp(uid, _expensePaidXp);
+      _addXp(uid, _expensePaidXp, source: 'expense', description: 'Settled an expense 💸');
 
-  Future<void> awardChoreCompleted(String uid, String householdId) =>
-      _addXp(uid, _choreCompletedXp);
+  Future<void> awardChoreCompleted(String uid, String householdId, {int? xp, String? choreTitle}) =>
+      _addXp(uid, xp ?? _choreCompletedXp, source: 'chore',
+          description: choreTitle != null ? 'Completed: $choreTitle 🧹' : 'Completed a chore 🧹');
 
   Future<void> awardPersonalTaskCompleted(
     String uid,
     String householdId,
-    int taskXp,
-  ) =>
-      _addXp(uid, taskXp.clamp(50, 1000));
+    int taskXp, {
+    String? taskTitle,
+  }) =>
+      _addXp(uid, taskXp.clamp(50, 1000), source: 'task',
+          description: taskTitle != null ? 'Completed task: $taskTitle ⭐' : 'Completed a task ⭐');
 
-  Future<void> _addXp(String uid, int amount) async {
+  Future<void> _addXp(String uid, int amount, {String source = 'other', String description = 'XP earned'}) async {
     final userRef = _db.collection('users').doc(uid);
 
     await _db.runTransaction((tx) async {
@@ -65,6 +68,14 @@ class XpService {
       }
 
       tx.update(userRef, updates);
+    });
+
+    // Log XP history entry (outside transaction, best-effort)
+    await _db.collection('users').doc(uid).collection('xp_history').add({
+      'amount': amount,
+      'source': source,
+      'description': description,
+      'timestamp': FieldValue.serverTimestamp(),
     });
   }
 
