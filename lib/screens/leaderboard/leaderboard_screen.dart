@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_widget.dart';
+import '../members/member_detail_screen.dart';
 
 /// Leaderboard tab — shows all household members ranked by total XP.
 class LeaderboardScreen extends StatelessWidget {
@@ -99,6 +100,7 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
                 final (user, _) = sorted[index];
                 return _LeaderboardCard(
                   user: user,
+                  role: sorted[index].$2,
                   rank: index + 1,
                   isMe: user.uid == widget.currentUid,
                 );
@@ -113,11 +115,13 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
 
 class _LeaderboardCard extends StatelessWidget {
   final UserModel user;
+  final HouseholdRole role;
   final int rank;
   final bool isMe;
 
   const _LeaderboardCard({
     required this.user,
+    required this.role,
     required this.rank,
     required this.isMe,
   });
@@ -139,6 +143,12 @@ class _LeaderboardCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       color: isMe ? colors.primaryContainer : null,
       child: ListTile(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MemberDetailScreen(user: user, role: role),
+          ),
+        ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         leading: Row(
           mainAxisSize: MainAxisSize.min,

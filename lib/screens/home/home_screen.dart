@@ -488,17 +488,18 @@ class _HouseholdDashboard extends StatelessWidget {
                     color: const Color(0xFF8B4000),
                     onTap: () => onSwitchTab?.call(3),
                   ),
-                  _TappableCard(
-                    icon: Icons.people,
-                    label: 'Members',
-                    subtitle: 'Profiles & XP history',
-                    color: const Color(0xFF6750A4),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const MembersScreen()),
+                  if (role == HouseholdRole.owner)
+                    _TappableCard(
+                      icon: Icons.people,
+                      label: 'Members',
+                      subtitle: 'Manage household',
+                      color: const Color(0xFF6750A4),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const MembersScreen()),
+                      ),
                     ),
-                  ),
                   _TappableCard(
                     icon: Icons.person,
                     label: 'Profile',
