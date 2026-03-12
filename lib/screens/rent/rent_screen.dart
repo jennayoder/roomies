@@ -225,6 +225,19 @@ class _RentEntryCard extends StatelessWidget {
                               paid ? TextDecoration.lineThrough : null,
                         ),
                       ),
+                      if (!paid) ...[
+                        const SizedBox(width: 8),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () => service.markMemberRentPaid(
+                              householdId, entry.id, e.key),
+                          child: const Text('Mark Paid'),
+                        ),
+                      ],
                     ],
                   ),
                 );
@@ -317,9 +330,7 @@ Future<void> _showAddRentSheet(
   required String currentUid,
   required FirestoreService service,
 }) async {
-  // Fetch renters/roomies to assign to
-  final allMembers =
-      await FirestoreService().getHouseholdMembers(householdId);
+  final allMembers = await FirestoreService().getHouseholdMembers(householdId);
   final renters = allMembers
       .where((m) =>
           m.$2 == HouseholdRole.renter || m.$2 == HouseholdRole.princess)
@@ -329,19 +340,15 @@ Future<void> _showAddRentSheet(
 
   if (renters.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('No Roomies or Princesses to assign rent to.')),
+      const SnackBar(content: Text('No Roomies or Princesses to assign rent to.')),
     );
     return;
   }
 
   final now = DateTime.now();
   final period = DateFormat('yyyy-MM').format(now);
-
-  // Per-member amount controllers
-  final controllers = {
-    for (final m in renters) m.$1.uid: TextEditingController()
-  };
+  final amountCtrl = TextEditingController();
+  (UserModel, HouseholdRole)? selectedMember;
   bool isRecurring = false;
   int recurringDay = now.day.clamp(1, 28);
 
@@ -365,43 +372,54 @@ Future<void> _showAddRentSheet(
               'Assign Rent — ${_periodFmt.format(now)}',
               style: Theme.of(ctx).textTheme.titleLarge,
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Set each member\'s rent amount',
-              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                  ),
-            ),
             const SizedBox(height: 16),
-            ...renters.map((m) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: TextField(
-                    controller: controllers[m.$1.uid],
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    decoration: InputDecoration(
-                      labelText: m.$1.displayName,
-                      prefixText: '\$ ',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: const Icon(Icons.attach_money),
-                    ),
-                  ),
-                )),
+
+            // Member picker
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                labelText: 'Member',
+                border: OutlineInputBorder(),
+              ),
+              value: selectedMember?.$1.uid,
+              items: renters
+                  .map((m) => DropdownMenuItem(
+                        value: m.$1.uid,
+                        child: Text(m.$1.displayName),
+                      ))
+                  .toList(),
+              onChanged: (uid) => setS(() {
+                selectedMember =
+                    renters.firstWhere((m) => m.$1.uid == uid);
+              }),
+            ),
+            const SizedBox(height: 12),
+
+            // Amount
+            TextField(
+              controller: amountCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Rent amount',
+                prefixText: '\$ ',
+                border: OutlineInputBorder(),
+              ),
+            ),
             const SizedBox(height: 8),
+
+            // Recurring toggle
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: isRecurring,
               title: const Text('🔁 Recurring monthly'),
               subtitle: isRecurring
-                  ? Text('Auto-repeats on day $recurringDay each month')
+                  ? Text('Repeats on day $recurringDay each month')
                   : const Text('One-time entry'),
               onChanged: (v) => setS(() => isRecurring = v),
             ),
             if (isRecurring) ...[
-              Text(
-                'Day of month: $recurringDay',
-                style: Theme.of(ctx).textTheme.bodySmall,
-              ),
+              Text('Day of month: $recurringDay',
+                  style: Theme.of(ctx).textTheme.bodySmall),
               Slider(
                 value: recurringDay.toDouble(),
                 min: 1,
@@ -412,22 +430,17 @@ Future<void> _showAddRentSheet(
               ),
             ],
             const SizedBox(height: 16),
+
             FilledButton(
               onPressed: () async {
-                final shares = <String, double>{};
-                for (final m in renters) {
-                  final val = double.tryParse(
-                      controllers[m.$1.uid]?.text ?? '');
-                  if (val != null && val > 0) shares[m.$1.uid] = val;
-                }
-                if (shares.isEmpty) return;
+                final member = selectedMember;
+                final amount = double.tryParse(amountCtrl.text);
+                if (member == null || amount == null || amount <= 0) return;
 
-                final total =
-                    shares.values.fold(0.0, (a, b) => a + b);
                 final entry = RentEntry(
                   id: const Uuid().v4(),
-                  totalAmount: total,
-                  memberShares: shares,
+                  totalAmount: amount,
+                  memberShares: {member.$1.uid: amount},
                   period: period,
                   createdById: currentUid,
                   createdAt: DateTime.now(),
