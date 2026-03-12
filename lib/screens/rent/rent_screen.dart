@@ -111,6 +111,14 @@ class _RentContent extends StatelessWidget {
                   currentUid: currentUid,
                   isOwner: isOwner,
                   service: service,
+                  onTap: () => _showRentDetailSheet(
+                    context,
+                    entry: entries[i],
+                    householdId: householdId,
+                    currentUid: currentUid,
+                    isOwner: isOwner,
+                    service: service,
+                  ),
                 ),
               );
             },
@@ -129,6 +137,7 @@ class _RentEntryCard extends StatelessWidget {
   final String currentUid;
   final bool isOwner;
   final FirestoreService service;
+  final VoidCallback? onTap;
 
   const _RentEntryCard({
     required this.entry,
@@ -136,6 +145,7 @@ class _RentEntryCard extends StatelessWidget {
     required this.currentUid,
     required this.isOwner,
     required this.service,
+    this.onTap,
   });
 
   String _periodLabel(String period) {
@@ -155,7 +165,10 @@ class _RentEntryCard extends StatelessWidget {
     final iHavePaid = entry.paidStatus[currentUid] ?? false;
 
     return Card(
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -288,6 +301,229 @@ class _RentEntryCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+      ),
+    );
+  }
+}
+
+// ─── Rent detail sheet ────────────────────────────────────────────────────────
+
+Future<void> _showRentDetailSheet(
+  BuildContext context, {
+  required RentEntry entry,
+  required String householdId,
+  required String currentUid,
+  required bool isOwner,
+  required FirestoreService service,
+}) async {
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => _RentDetailSheet(
+      entry: entry,
+      householdId: householdId,
+      currentUid: currentUid,
+      isOwner: isOwner,
+      service: service,
+    ),
+  );
+}
+
+class _RentDetailSheet extends StatelessWidget {
+  final RentEntry entry;
+  final String householdId;
+  final String currentUid;
+  final bool isOwner;
+  final FirestoreService service;
+
+  const _RentDetailSheet({
+    required this.entry,
+    required this.householdId,
+    required this.currentUid,
+    required this.isOwner,
+    required this.service,
+  });
+
+  String _periodLabel(String period) {
+    try {
+      final dt = DateFormat('yyyy-MM').parse(period);
+      return _periodFmt.format(dt);
+    } catch (_) {
+      return period;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final myShare = entry.memberShares[currentUid];
+    final iHavePaid = entry.paidStatus[currentUid] ?? false;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Handle bar
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: colors.onSurfaceVariant.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
+          // Title row
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _periodLabel(entry.period),
+                  style: textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (entry.isFullyPaid)
+                Chip(
+                  label: const Text('Fully Paid ✅'),
+                  backgroundColor: colors.tertiaryContainer,
+                  labelStyle: TextStyle(color: colors.onTertiaryContainer),
+                ),
+            ],
+          ),
+          if (entry.isRecurring) ...[
+            const SizedBox(height: 4),
+            Text('🔁 Recurring monthly',
+                style: textTheme.bodySmall
+                    ?.copyWith(color: colors.onSurfaceVariant)),
+          ],
+          const SizedBox(height: 16),
+
+          // Total
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Total', style: textTheme.bodyMedium),
+              Text(
+                _currencyFmt.format(entry.totalAmount),
+                style: textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+
+          // Member shares with paid status
+          ...entry.memberShares.entries.map((e) {
+            final paid = entry.paidStatus[e.key] ?? false;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    paid ? Icons.check_circle : Icons.radio_button_unchecked,
+                    size: 18,
+                    color: paid ? colors.primary : colors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _MemberName(uid: e.key, householdId: householdId),
+                  ),
+                  Text(
+                    _currencyFmt.format(e.value),
+                    style: textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: paid ? colors.primary : null,
+                      decoration: paid ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                  // Owner: mark paid per member
+                  if (isOwner && !paid) ...[
+                    const SizedBox(width: 8),
+                    FilledButton.tonal(
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () async {
+                        await service.markMemberRentPaid(
+                            householdId, entry.id, e.key);
+                        if (context.mounted) Navigator.pop(context);
+                      },
+                      child: const Text('Mark Paid'),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+
+          // Renter: pay my share
+          if (!isOwner && myShare != null && !iHavePaid) ...[
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: () async {
+                await service.markMemberRentPaid(
+                    householdId, entry.id, currentUid);
+                await XpService().awardRentPaidOnTime(currentUid, householdId);
+                if (context.mounted) Navigator.pop(context);
+              },
+              icon: const Icon(Icons.check),
+              label: const Text('Mark My Rent Paid (+20 XP)'),
+            ),
+          ],
+
+          // Owner: delete
+          if (isOwner) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: colors.error,
+                side: BorderSide(color: colors.error),
+              ),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (dCtx) => AlertDialog(
+                    title: const Text('Delete rent entry?'),
+                    content: const Text(
+                        'This will permanently remove this rent entry.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dCtx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: colors.error),
+                        onPressed: () => Navigator.pop(dCtx, true),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await service.deleteRentEntry(householdId, entry.id);
+                  if (context.mounted) Navigator.pop(context);
+                }
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Delete Entry'),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -449,7 +685,7 @@ Future<void> _showAddRentSheet(
                   paidStatus: {},
                 );
                 await service.addRentEntry(householdId, entry);
-                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) Navigator.pop(context);
               },
               child: const Text('Save'),
             ),

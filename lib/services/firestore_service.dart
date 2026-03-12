@@ -51,6 +51,10 @@ class FirestoreService {
     await XpService().awardRentPaidOnTime(_uid, householdId);
   }
 
+  Future<void> deleteRentEntry(String householdId, String entryId) async {
+    await _rent(householdId).doc(entryId).delete();
+  }
+
   /// Marks a specific member's share as paid and awards 20 XP.
   /// Checks if all members have paid; if so, marks the entry fully paid.
   Future<void> markMemberRentPaid(
