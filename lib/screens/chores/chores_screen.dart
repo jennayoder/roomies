@@ -563,15 +563,20 @@ class _RepeatableChoreCard extends StatelessWidget {
             ),
           ),
 
-          // Recent completions stream
+          // Today's completions only — resets at midnight
           StreamBuilder<List<ChoreCompletion>>(
             stream: service.choreCompletionsStream(householdId, chore.id),
             builder: (context, snap) {
-              final completions = snap.data ?? [];
-              if (completions.isEmpty) {
+              final now = DateTime.now();
+              final startOfDay = DateTime(now.year, now.month, now.day);
+              final todayOnly = (snap.data ?? [])
+                  .where((c) => c.claimedAt.isAfter(startOfDay))
+                  .toList();
+
+              if (todayOnly.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Text('No claims yet — be the first!',
+                  child: Text('No claims today — be the first!',
                       style: textTheme.bodySmall?.copyWith(
                           color: colors.onSurfaceVariant)),
                 );
@@ -581,7 +586,7 @@ class _RepeatableChoreCard extends StatelessWidget {
                 child: Wrap(
                   spacing: 6,
                   runSpacing: 4,
-                  children: completions.take(5).map((c) {
+                  children: todayOnly.take(10).map((c) {
                     return Chip(
                       avatar: const Icon(Icons.check_circle, size: 14),
                       label: Text(
