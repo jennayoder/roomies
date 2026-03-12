@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/chore.dart';
+import '../../models/chore_completion.dart';
 import '../../models/household.dart';
 import '../../models/personal_task.dart';
 import '../../models/user_model.dart';
@@ -431,6 +432,15 @@ class _ChoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (chore.isRepeatable) {
+      return _RepeatableChoreCard(
+        chore: chore,
+        householdId: householdId,
+        currentUid: currentUid,
+        service: service,
+      );
+    }
+
     final colors = Theme.of(context).colorScheme;
     final isUnassigned = chore.assignedToId == null;
     final isAssignedToMe = chore.assignedToId == currentUid;
@@ -478,6 +488,116 @@ class _ChoreCard extends StatelessWidget {
                 icon: Icon(Icons.delete_outlined, color: colors.error),
                 onPressed: () => service.deleteChore(householdId, chore.id),
               ),
+      ),
+    );
+  }
+}
+
+// ─── Repeatable chore card ────────────────────────────────────────────────────
+
+class _RepeatableChoreCard extends StatelessWidget {
+  final Chore chore;
+  final String householdId;
+  final String currentUid;
+  final FirestoreService service;
+
+  const _RepeatableChoreCard({
+    required this.chore,
+    required this.householdId,
+    required this.currentUid,
+    required this.service,
+  });
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            onTap: () => showChoreDetail(context, chore: chore, householdId: householdId),
+            leading: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.repeat, color: colors.onPrimaryContainer, size: 20),
+            ),
+            title: Text(chore.title,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(
+              '⭐ ${chore.xpReward} XP · Always available',
+              style: textTheme.bodySmall,
+            ),
+            trailing: FilledButton(
+              onPressed: () async {
+                // Get current user's display name
+                final user = await FirestoreService()
+                    .getHouseholdMembers(householdId)
+                    .then((members) =>
+                        members.where((m) => m.$1.uid == currentUid).firstOrNull);
+                final name = user?.$1.displayName ?? 'Someone';
+                await service.claimRepeatableChore(
+                  householdId,
+                  chore.id,
+                  currentUid,
+                  name,
+                  xpReward: chore.xpReward,
+                  choreTitle: chore.title,
+                );
+              },
+              child: const Text('Claim +XP'),
+            ),
+          ),
+
+          // Recent completions stream
+          StreamBuilder<List<ChoreCompletion>>(
+            stream: service.choreCompletionsStream(householdId, chore.id),
+            builder: (context, snap) {
+              final completions = snap.data ?? [];
+              if (completions.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Text('No claims yet — be the first!',
+                      style: textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant)),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: completions.take(5).map((c) {
+                    return Chip(
+                      avatar: const Icon(Icons.check_circle, size: 14),
+                      label: Text(
+                        '${c.displayName} · ${_timeAgo(c.claimedAt)}',
+                        style: textTheme.labelSmall,
+                      ),
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      backgroundColor: colors.secondaryContainer,
+                    );
+                  }).toList(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -600,6 +720,7 @@ Future<void> _showAddChoreSheet(
   ChoreFrequency selectedFrequency = ChoreFrequency.once;
   DateTime? dueDate;
   int xpReward = 25;
+  bool isRepeatable = false;
   // Non-owners default to unassigned (they can't self-assign)
   String assignedTo = isOwner ? currentUid : '';
 
@@ -706,6 +827,19 @@ Future<void> _showAddChoreSheet(
               label: '$xpReward XP',
               onChanged: (v) => setS(() => xpReward = v.round()),
             ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: isRepeatable,
+              title: const Text('🔁 Always available'),
+              subtitle: Text(
+                isRepeatable
+                    ? 'Anyone can claim this chore repeatedly — it never disappears'
+                    : 'One-time chore — disappears when completed',
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+              onChanged: (v) => setS(() => isRepeatable = v),
+            ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () async {
@@ -715,11 +849,12 @@ Future<void> _showAddChoreSheet(
                   id: const Uuid().v4(),
                   title: title,
                   description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-                  assignedToId: assignedTo.isEmpty ? null : assignedTo,
+                  assignedToId: isRepeatable ? null : (assignedTo.isEmpty ? null : assignedTo),
                   frequency: selectedFrequency,
-                  dueDate: dueDate,
+                  dueDate: isRepeatable ? null : dueDate,
                   createdAt: DateTime.now(),
                   xpReward: xpReward,
+                  isRepeatable: isRepeatable,
                 );
                 await service.addChore(householdId, chore);
                 if (ctx.mounted) Navigator.pop(ctx);

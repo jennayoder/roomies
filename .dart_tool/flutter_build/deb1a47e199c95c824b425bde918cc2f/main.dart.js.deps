@@ -652,6 +652,7 @@ file:///home/moneymaker/Projects/roomies/lib/app.dart
 file:///home/moneymaker/Projects/roomies/lib/firebase_options.dart
 file:///home/moneymaker/Projects/roomies/lib/main.dart
 file:///home/moneymaker/Projects/roomies/lib/models/chore.dart
+file:///home/moneymaker/Projects/roomies/lib/models/chore_completion.dart
 file:///home/moneymaker/Projects/roomies/lib/models/event.dart
 file:///home/moneymaker/Projects/roomies/lib/models/expense.dart
 file:///home/moneymaker/Projects/roomies/lib/models/household.dart

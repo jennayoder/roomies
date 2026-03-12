@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/chore.dart';
+import '../models/chore_completion.dart';
 import '../models/event.dart';
 import '../models/expense.dart';
 import '../models/household.dart';
@@ -158,6 +159,41 @@ class FirestoreService {
 
   Future<void> deleteChore(String householdId, String choreId) async {
     await _chores(householdId).doc(choreId).delete();
+  }
+
+  /// Logs a repeatable chore completion without marking it done.
+  Future<void> claimRepeatableChore(
+    String householdId,
+    String choreId,
+    String uid,
+    String displayName, {
+    int xpReward = 25,
+    String? choreTitle,
+  }) async {
+    await _chores(householdId)
+        .doc(choreId)
+        .collection('completions')
+        .add(ChoreCompletion(
+          id: '',
+          uid: uid,
+          displayName: displayName,
+          claimedAt: DateTime.now(),
+        ).toMap());
+
+    await XpService().awardChoreCompleted(uid, householdId,
+        xp: xpReward, choreTitle: choreTitle);
+  }
+
+  /// Streams recent completions for a repeatable chore (last 20).
+  Stream<List<ChoreCompletion>> choreCompletionsStream(
+      String householdId, String choreId) {
+    return _chores(householdId)
+        .doc(choreId)
+        .collection('completions')
+        .orderBy('claimedAt', descending: true)
+        .limit(20)
+        .snapshots()
+        .map((s) => s.docs.map(ChoreCompletion.fromDoc).toList());
   }
 
   // ─── Events ────────────────────────────────────────────────────────────────

@@ -36,6 +36,10 @@ class Chore {
   /// XP awarded when this chore is completed. Defaults to 25.
   final int xpReward;
 
+  /// If true, this chore never disappears — it can be claimed repeatedly.
+  /// Completions are logged to a subcollection; isCompleted stays false.
+  final bool isRepeatable;
+
   const Chore({
     required this.id,
     required this.title,
@@ -47,6 +51,7 @@ class Chore {
     this.completedAt,
     required this.createdAt,
     this.xpReward = 25,
+    this.isRepeatable = false,
   });
 
   // ─── Firestore serialization ───────────────────────────────────────────────
@@ -71,6 +76,7 @@ class Chore {
           : null,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       xpReward: (data['xpReward'] as int?) ?? 25,
+      isRepeatable: (data['isRepeatable'] as bool?) ?? false,
     );
   }
 
@@ -85,6 +91,7 @@ class Chore {
             completedAt != null ? Timestamp.fromDate(completedAt!) : null,
         'createdAt': Timestamp.fromDate(createdAt),
         'xpReward': xpReward,
+        'isRepeatable': isRepeatable,
       };
 
   Chore copyWith({
@@ -103,5 +110,6 @@ class Chore {
         completedAt: completedAt ?? this.completedAt,
         createdAt: createdAt,
         xpReward: xpReward,
+        isRepeatable: isRepeatable,
       );
 }
