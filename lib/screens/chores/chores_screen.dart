@@ -55,6 +55,7 @@ class _ChoresScreenState extends State<ChoresScreen> {
           builder: (context, householdSnap) {
             final role = householdSnap.data?.members[uid];
             final isOwner = role == HouseholdRole.owner;
+            final isGuest = role == HouseholdRole.guest;
 
             return Scaffold(
               appBar: AppBar(
@@ -82,7 +83,7 @@ class _ChoresScreenState extends State<ChoresScreen> {
                 householdId: householdId,
                 currentUid: uid,
                 isOwner: isOwner,
-                showAll: _showAll || isOwner,
+                showAll: _showAll || isOwner || isGuest,
               ),
             );
           },
@@ -577,15 +578,19 @@ Future<void> _showAddChoreSheet(
 }) async {
   final service = FirestoreService();
 
-  // Fetch members for assignee picker
-  List<(String uid, String name)> members = [(currentUid, 'Me')];
-  if (isOwner && household != null) {
-    try {
-      final fetched = await FirestoreService().getHouseholdMembers(householdId);
-      members = fetched
-          .map((m) => (m.$1.uid, m.$1.uid == currentUid ? 'Me (${m.$1.displayName})' : m.$1.displayName))
-          .toList();
-    } catch (_) {}
+  // Fetch all members for assignee picker
+  // Owner can assign to anyone (including themselves)
+  // Everyone else can assign to anyone EXCEPT themselves
+  List<(String uid, String name)> members = [];
+  try {
+    final fetched = await FirestoreService().getHouseholdMembers(householdId);
+    members = fetched
+        .where((m) => isOwner || m.$1.uid != currentUid) // non-owners can't self-assign
+        .map((m) => (m.$1.uid, m.$1.uid == currentUid ? 'Me (${m.$1.displayName})' : m.$1.displayName))
+        .toList();
+  } catch (_) {
+    // fallback: owner can assign to self, others get no options
+    if (isOwner) members = [(currentUid, 'Me')];
   }
 
   if (!context.mounted) return;
@@ -595,7 +600,8 @@ Future<void> _showAddChoreSheet(
   ChoreFrequency selectedFrequency = ChoreFrequency.once;
   DateTime? dueDate;
   int xpReward = 25;
-  String assignedTo = currentUid; // '' = unassigned/up for grabs
+  // Non-owners default to unassigned (they can't self-assign)
+  String assignedTo = isOwner ? currentUid : '';
 
   await showModalBottomSheet(
     context: context,
