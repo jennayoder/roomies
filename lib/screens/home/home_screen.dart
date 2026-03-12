@@ -12,6 +12,7 @@ import '../../services/household_service.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_widget.dart';
 import '../leaderboard/leaderboard_screen.dart';
+import '../members/member_detail_screen.dart';
 import '../members/members_screen.dart';
 import '../rent/rent_screen.dart';
 
@@ -836,6 +837,15 @@ class _MiniLeaderboardState extends State<_MiniLeaderboard> {
                 if (i > 0) const Divider(height: 1),
                 ListTile(
                   dense: true,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MemberDetailScreen(
+                        user: top[i].$1,
+                        role: top[i].$2 as HouseholdRole,
+                      ),
+                    ),
+                  ),
                   leading: Text(
                     ['🥇', '🥈', '🥉'][i],
                     style: const TextStyle(fontSize: 20),
