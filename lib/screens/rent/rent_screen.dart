@@ -3,15 +3,19 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../models/household.dart';
 import '../../models/rent_entry.dart';
+import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/household_service.dart';
+import '../../services/xp_service.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_widget.dart';
 
 final _currencyFmt = NumberFormat.currency(symbol: '\$');
+final _periodFmt = DateFormat('MMMM yyyy');
 
-/// Rent tab — lists monthly rent entries and allows logging new ones.
 class RentScreen extends StatelessWidget {
   const RentScreen({super.key});
 
@@ -19,10 +23,10 @@ class RentScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
 
-    return StreamBuilder(
+    return StreamBuilder<UserModel?>(
       stream: auth.userProfileStream(),
-      builder: (context, snapshot) {
-        final user = snapshot.data;
+      builder: (context, snap) {
+        final user = snap.data;
         if (user?.householdId == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('Rent')),
@@ -33,8 +37,10 @@ class RentScreen extends StatelessWidget {
             ),
           );
         }
-
-        return _RentContent(householdId: user!.householdId!);
+        return _RentContent(
+          householdId: user!.householdId!,
+          currentUid: auth.currentUser!.uid,
+        );
       },
     );
   }
@@ -42,69 +48,111 @@ class RentScreen extends StatelessWidget {
 
 class _RentContent extends StatelessWidget {
   final String householdId;
-  const _RentContent({required this.householdId});
+  final String currentUid;
+  const _RentContent({required this.householdId, required this.currentUid});
 
   @override
   Widget build(BuildContext context) {
     final service = FirestoreService();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Rent')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddRentDialog(context, householdId, service),
-        icon: const Icon(Icons.add),
-        label: const Text('Log Rent'),
-      ),
-      body: StreamBuilder<List<RentEntry>>(
-        stream: service.rentStream(householdId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingWidget(message: 'Loading rent entries…');
-          }
+    return StreamBuilder<Household?>(
+      stream: HouseholdService().householdStream(householdId),
+      builder: (context, householdSnap) {
+        final role = householdSnap.data?.members[currentUid];
+        final isOwner = role == HouseholdRole.owner;
 
-          final entries = snapshot.data ?? [];
-          if (entries.isEmpty) {
-            return const EmptyState(
-              icon: Icons.receipt_long_outlined,
-              title: 'No rent entries yet',
-              subtitle: 'Tap "Log Rent" to record this month\'s rent.',
-            );
-          }
+        return Scaffold(
+          appBar: AppBar(title: const Text('Rent')),
+          floatingActionButton: isOwner
+              ? FloatingActionButton.extended(
+                  onPressed: () => _showAddRentSheet(
+                    context,
+                    householdId: householdId,
+                    currentUid: currentUid,
+                    service: service,
+                  ),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Assign Rent'),
+                )
+              : null,
+          body: StreamBuilder<List<RentEntry>>(
+            stream: service.rentStream(householdId),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const LoadingWidget(message: 'Loading rent…');
+              }
 
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-            itemCount: entries.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, i) {
-              final entry = entries[i];
-              return _RentEntryCard(
-                entry: entry,
-                householdId: householdId,
-                service: service,
+              final all = snapshot.data ?? [];
+
+              // Filter: owner sees all; renters only see entries they're in
+              final entries = isOwner
+                  ? all
+                  : all
+                      .where((e) => e.memberShares.containsKey(currentUid))
+                      .toList();
+
+              if (entries.isEmpty) {
+                return EmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: isOwner ? 'No rent entries yet' : 'No rent assigned to you',
+                  subtitle: isOwner
+                      ? 'Tap "Assign Rent" to set up rent for your renters.'
+                      : 'Your landlord hasn\'t assigned rent yet.',
+                );
+              }
+
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                itemCount: entries.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, i) => _RentEntryCard(
+                  entry: entries[i],
+                  householdId: householdId,
+                  currentUid: currentUid,
+                  isOwner: isOwner,
+                  service: service,
+                ),
               );
             },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
 
+// ─── Rent entry card ──────────────────────────────────────────────────────────
+
 class _RentEntryCard extends StatelessWidget {
   final RentEntry entry;
   final String householdId;
+  final String currentUid;
+  final bool isOwner;
   final FirestoreService service;
 
   const _RentEntryCard({
     required this.entry,
     required this.householdId,
+    required this.currentUid,
+    required this.isOwner,
     required this.service,
   });
+
+  String _periodLabel(String period) {
+    try {
+      final dt = DateFormat('yyyy-MM').parse(period);
+      return _periodFmt.format(dt);
+    } catch (_) {
+      return period;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final myShare = entry.memberShares[currentUid];
+    final iHavePaid = entry.paidStatus[currentUid] ?? false;
 
     return Card(
       child: Padding(
@@ -112,58 +160,119 @@ class _RentEntryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header row
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    entry.period,
-                    style: textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _periodLabel(entry.period),
+                        style: textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      if (entry.isRecurring)
+                        Text(
+                          '🔁 Recurring monthly',
+                          style: textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant),
+                        ),
+                    ],
                   ),
                 ),
                 if (entry.isFullyPaid)
                   Chip(
-                    label: const Text('Paid'),
-                    avatar: const Icon(Icons.check_circle, size: 16),
+                    label: const Text('Fully Paid ✅'),
                     backgroundColor: colors.tertiaryContainer,
                     labelStyle:
                         TextStyle(color: colors.onTertiaryContainer),
-                  )
-                else
-                  FilledButton.tonal(
-                    onPressed: () =>
-                        service.markRentPaid(householdId, entry.id),
-                    child: const Text('Mark Paid'),
                   ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Total: ${_currencyFmt.format(entry.totalAmount)}',
-              style: textTheme.bodyLarge,
-            ),
-            const Divider(height: 20),
-            Text(
-              'Member shares:',
-              style: textTheme.labelMedium
-                  ?.copyWith(color: colors.onSurfaceVariant),
-            ),
-            const SizedBox(height: 4),
-            ...entry.memberShares.entries.map(
-              (e) => Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(e.key, style: textTheme.bodySmall),
-                    Text(
-                      _currencyFmt.format(e.value),
-                      style: textTheme.bodySmall,
+            const SizedBox(height: 12),
+
+            // Owner sees total + all members; renter sees only their share
+            if (isOwner) ...[
+              Text(
+                'Total: ${_currencyFmt.format(entry.totalAmount)}',
+                style: textTheme.bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              ...entry.memberShares.entries.map((e) {
+                final paid = entry.paidStatus[e.key] ?? false;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Icon(
+                        paid ? Icons.check_circle : Icons.radio_button_unchecked,
+                        size: 16,
+                        color: paid ? colors.primary : colors.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _MemberName(uid: e.key, householdId: householdId),
+                      ),
+                      Text(
+                        _currencyFmt.format(e.value),
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: paid ? colors.primary : null,
+                          decoration:
+                              paid ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ] else if (myShare != null) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Your share:', style: textTheme.bodyMedium),
+                  Text(
+                    _currencyFmt.format(myShare),
+                    style: textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: iHavePaid ? colors.primary : colors.error,
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ],
+
+            // Pay button for renters
+            if (!isOwner && myShare != null && !iHavePaid) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    await service.markMemberRentPaid(
+                        householdId, entry.id, currentUid);
+                    await XpService().awardRentPaidOnTime(
+                        currentUid, householdId);
+                  },
+                  icon: const Icon(Icons.check),
+                  label: const Text('Mark My Rent Paid (+20 XP)'),
                 ),
               ),
-            ),
+            ] else if (!isOwner && iHavePaid) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.check_circle, color: colors.primary, size: 18),
+                  const SizedBox(width: 6),
+                  Text('You paid ✅',
+                      style: textTheme.bodyMedium
+                          ?.copyWith(color: colors.primary)),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -171,69 +280,168 @@ class _RentEntryCard extends StatelessWidget {
   }
 }
 
-// ─── Add rent dialog ──────────────────────────────────────────────────────────
+// ─── Member name resolver ─────────────────────────────────────────────────────
 
-Future<void> _showAddRentDialog(
-  BuildContext context,
-  String householdId,
-  FirestoreService service,
-) async {
-  final amountCtrl = TextEditingController();
+class _MemberName extends StatefulWidget {
+  final String uid;
+  final String householdId;
+  const _MemberName({required this.uid, required this.householdId});
+
+  @override
+  State<_MemberName> createState() => _MemberNameState();
+}
+
+class _MemberNameState extends State<_MemberName> {
+  String _name = '…';
+
+  @override
+  void initState() {
+    super.initState();
+    FirestoreService().getHouseholdMembers(widget.householdId).then((members) {
+      final match = members.where((m) => m.$1.uid == widget.uid).firstOrNull;
+      if (match != null && mounted) {
+        setState(() => _name = match.$1.displayName);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(_name);
+}
+
+// ─── Add rent sheet ───────────────────────────────────────────────────────────
+
+Future<void> _showAddRentSheet(
+  BuildContext context, {
+  required String householdId,
+  required String currentUid,
+  required FirestoreService service,
+}) async {
+  // Fetch renters/roomies to assign to
+  final allMembers =
+      await FirestoreService().getHouseholdMembers(householdId);
+  final renters = allMembers
+      .where((m) =>
+          m.$2 == HouseholdRole.renter || m.$2 == HouseholdRole.princess)
+      .toList();
+
+  if (!context.mounted) return;
+
+  if (renters.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('No Roomies or Princesses to assign rent to.')),
+    );
+    return;
+  }
+
   final now = DateTime.now();
   final period = DateFormat('yyyy-MM').format(now);
+
+  // Per-member amount controllers
+  final controllers = {
+    for (final m in renters) m.$1.uid: TextEditingController()
+  };
+  bool isRecurring = false;
+  int recurringDay = now.day.clamp(1, 28);
 
   await showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (ctx) => Padding(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 24,
-        bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Log Rent — $period',
-            style: Theme.of(ctx).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: amountCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Total rent amount',
-              prefixText: '\$ ',
-              border: OutlineInputBorder(),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => SingleChildScrollView(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Assign Rent — ${_periodFmt.format(now)}',
+              style: Theme.of(ctx).textTheme.titleLarge,
             ),
-          ),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: () async {
-              final amount = double.tryParse(amountCtrl.text);
-              if (amount == null || amount <= 0) return;
+            const SizedBox(height: 4),
+            Text(
+              'Set each member\'s rent amount',
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            ...renters.map((m) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextField(
+                    controller: controllers[m.$1.uid],
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    decoration: InputDecoration(
+                      labelText: m.$1.displayName,
+                      prefixText: '\$ ',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: const Icon(Icons.attach_money),
+                    ),
+                  ),
+                )),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: isRecurring,
+              title: const Text('🔁 Recurring monthly'),
+              subtitle: isRecurring
+                  ? Text('Auto-repeats on day $recurringDay each month')
+                  : const Text('One-time entry'),
+              onChanged: (v) => setS(() => isRecurring = v),
+            ),
+            if (isRecurring) ...[
+              Text(
+                'Day of month: $recurringDay',
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+              Slider(
+                value: recurringDay.toDouble(),
+                min: 1,
+                max: 28,
+                divisions: 27,
+                label: 'Day $recurringDay',
+                onChanged: (v) => setS(() => recurringDay = v.round()),
+              ),
+            ],
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () async {
+                final shares = <String, double>{};
+                for (final m in renters) {
+                  final val = double.tryParse(
+                      controllers[m.$1.uid]?.text ?? '');
+                  if (val != null && val > 0) shares[m.$1.uid] = val;
+                }
+                if (shares.isEmpty) return;
 
-              final auth = context.read<AuthService>();
-              final uid = auth.currentUser!.uid;
-
-              final entry = RentEntry(
-                id: const Uuid().v4(),
-                totalAmount: amount,
-                memberShares: {uid: amount}, // simplified single-payer
-                period: period,
-                createdById: uid,
-                createdAt: DateTime.now(),
-              );
-              await service.addRentEntry(householdId, entry);
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('Save'),
-          ),
-        ],
+                final total =
+                    shares.values.fold(0.0, (a, b) => a + b);
+                final entry = RentEntry(
+                  id: const Uuid().v4(),
+                  totalAmount: total,
+                  memberShares: shares,
+                  period: period,
+                  createdById: currentUid,
+                  createdAt: DateTime.now(),
+                  isRecurring: isRecurring,
+                  recurringDay: isRecurring ? recurringDay : null,
+                  paidStatus: {},
+                );
+                await service.addRentEntry(householdId, entry);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     ),
   );

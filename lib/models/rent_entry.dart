@@ -23,6 +23,15 @@ class RentEntry {
   /// Whether all members have marked their share as paid.
   final bool isFullyPaid;
 
+  /// Per-member paid status: { uid: true/false }
+  final Map<String, bool> paidStatus;
+
+  /// Whether this rent repeats monthly.
+  final bool isRecurring;
+
+  /// Day of month to auto-create next entry (1–28) if recurring.
+  final int? recurringDay;
+
   const RentEntry({
     required this.id,
     required this.totalAmount,
@@ -31,6 +40,9 @@ class RentEntry {
     required this.createdById,
     required this.createdAt,
     this.isFullyPaid = false,
+    this.paidStatus = const {},
+    this.isRecurring = false,
+    this.recurringDay,
   });
 
   // ─── Firestore serialization ───────────────────────────────────────────────
@@ -49,6 +61,15 @@ class RentEntry {
       createdById: data['createdById'] as String,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       isFullyPaid: (data['isFullyPaid'] as bool?) ?? false,
+      paidStatus: data['paidStatus'] != null
+          ? Map<String, bool>.from(
+              (data['paidStatus'] as Map).map(
+                (k, v) => MapEntry(k as String, v as bool),
+              ),
+            )
+          : {},
+      isRecurring: (data['isRecurring'] as bool?) ?? false,
+      recurringDay: data['recurringDay'] as int?,
     );
   }
 
@@ -59,5 +80,8 @@ class RentEntry {
         'createdById': createdById,
         'createdAt': Timestamp.fromDate(createdAt),
         'isFullyPaid': isFullyPaid,
+        'paidStatus': paidStatus,
+        'isRecurring': isRecurring,
+        'recurringDay': recurringDay,
       };
 }

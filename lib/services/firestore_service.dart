@@ -51,6 +51,29 @@ class FirestoreService {
     await XpService().awardRentPaidOnTime(_uid, householdId);
   }
 
+  /// Marks a specific member's share as paid and awards 20 XP.
+  /// Checks if all members have paid; if so, marks the entry fully paid.
+  Future<void> markMemberRentPaid(
+      String householdId, String entryId, String uid) async {
+    final ref = _rent(householdId).doc(entryId);
+    final doc = await ref.get();
+    if (!doc.exists) return;
+
+    final entry = RentEntry.fromDoc(doc);
+    final newPaidStatus = Map<String, bool>.from(entry.paidStatus)
+      ..[uid] = true;
+
+    final allPaid =
+        entry.memberShares.keys.every((k) => newPaidStatus[k] == true);
+
+    await ref.update({
+      'paidStatus.$uid': true,
+      if (allPaid) 'isFullyPaid': true,
+    });
+
+    await XpService().awardRentPaidOnTime(uid, householdId);
+  }
+
   // ─── Expenses ──────────────────────────────────────────────────────────────
 
   Stream<List<Expense>> expensesStream(String householdId) {

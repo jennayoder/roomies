@@ -9,7 +9,7 @@ import '../models/level_system.dart';
 class XpService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  static const int _rentOnTimeXp = 300;
+  static const int _rentOnTimeXp = 20;
   static const int _expensePaidXp = 100;
   static const int _choreCompletedXp = 50;
 
