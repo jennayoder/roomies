@@ -41,6 +41,15 @@ class UserModel {
   /// Set by XpService when the user levels up; cleared after dialog is shown.
   final int? pendingLevelUp;
 
+  /// Total number of game wins logged.
+  final int gameWins;
+
+  /// Date string (yyyy-MM-dd) of last daily check-in. Null if never checked in.
+  final String? lastCheckIn;
+
+  /// Earned badge IDs, e.g. ['game_champion'].
+  final List<String> badges;
+
   const UserModel({
     required this.uid,
     required this.displayName,
@@ -56,6 +65,9 @@ class UserModel {
     this.unlockedAvatars = const [],
     this.unlockedThemes = const [],
     this.pendingLevelUp,
+    this.gameWins = 0,
+    this.lastCheckIn,
+    this.badges = const [],
   });
 
   // ─── Firestore serialization ───────────────────────────────────────────────
@@ -77,6 +89,9 @@ class UserModel {
       unlockedAvatars: List<String>.from(data['unlockedAvatars'] ?? const []),
       unlockedThemes: List<String>.from(data['unlockedThemes'] ?? const []),
       pendingLevelUp: data['pendingLevelUp'] as int?,
+      gameWins: (data['gameWins'] as int?) ?? 0,
+      lastCheckIn: data['lastCheckIn'] as String?,
+      badges: List<String>.from(data['badges'] ?? const []),
     );
   }
 
@@ -94,7 +109,18 @@ class UserModel {
         'unlockedAvatars': unlockedAvatars,
         'unlockedThemes': unlockedThemes,
         'pendingLevelUp': pendingLevelUp,
+        'gameWins': gameWins,
+        'lastCheckIn': lastCheckIn,
+        'badges': badges,
       };
+
+  bool get checkedInToday {
+    if (lastCheckIn == null) return false;
+    final today = DateTime.now();
+    final todayStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    return lastCheckIn == todayStr;
+  }
 
   UserModel copyWith({
     String? displayName,
@@ -108,6 +134,9 @@ class UserModel {
     List<String>? unlockedAvatars,
     List<String>? unlockedThemes,
     int? pendingLevelUp,
+    int? gameWins,
+    String? lastCheckIn,
+    List<String>? badges,
   }) =>
       UserModel(
         uid: uid,
@@ -124,5 +153,8 @@ class UserModel {
         unlockedAvatars: unlockedAvatars ?? this.unlockedAvatars,
         unlockedThemes: unlockedThemes ?? this.unlockedThemes,
         pendingLevelUp: pendingLevelUp ?? this.pendingLevelUp,
+        gameWins: gameWins ?? this.gameWins,
+        lastCheckIn: lastCheckIn ?? this.lastCheckIn,
+        badges: badges ?? this.badges,
       );
 }

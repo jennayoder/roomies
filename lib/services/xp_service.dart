@@ -12,6 +12,8 @@ class XpService {
   static const int _rentOnTimeXp = 20;
   static const int _expensePaidXp = 100;
   static const int _choreCompletedXp = 50;
+  static const int _gameWinXp = 50;
+  static const int _dailyCheckInXp = 5;
 
   Future<void> awardRentPaidOnTime(String uid, String householdId) =>
       _addXp(uid, _rentOnTimeXp, source: 'rent', description: 'Paid rent on time 🏠');
@@ -22,6 +24,13 @@ class XpService {
   Future<void> awardChoreCompleted(String uid, String householdId, {int? xp, String? choreTitle}) =>
       _addXp(uid, xp ?? _choreCompletedXp, source: 'chore',
           description: choreTitle != null ? 'Completed: $choreTitle 🧹' : 'Completed a chore 🧹');
+
+  Future<void> awardGameWin(String uid, String householdId, {String? gameName}) =>
+      _addXp(uid, _gameWinXp, source: 'game',
+          description: gameName != null ? 'Won: $gameName 🏆' : 'Won a game 🏆');
+
+  Future<void> awardDailyCheckIn(String uid) =>
+      _addXp(uid, _dailyCheckInXp, source: 'checkin', description: 'Daily check-in ☀️');
 
   Future<void> awardPersonalTaskCompleted(
     String uid,

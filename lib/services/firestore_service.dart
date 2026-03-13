@@ -323,4 +323,55 @@ class FirestoreService {
     if (!doc.exists) return null;
     return (doc.data() as Map<String, dynamic>)['inviteCode'] as String?;
   }
+
+  // ─── Daily check-in ────────────────────────────────────────────────────────
+
+  /// Records a daily check-in for [uid], awards 5 XP.
+  /// Returns false if already checked in today.
+  Future<bool> dailyCheckIn(String uid) async {
+    final today = DateTime.now();
+    final todayStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
+    final doc = await _db.collection('users').doc(uid).get();
+    if (!doc.exists) return false;
+    final data = doc.data() as Map<String, dynamic>;
+    if (data['lastCheckIn'] == todayStr) return false; // already checked in
+
+    await _db.collection('users').doc(uid).update({'lastCheckIn': todayStr});
+    await XpService().awardDailyCheckIn(uid);
+    return true;
+  }
+
+  // ─── Game wins ─────────────────────────────────────────────────────────────
+
+  /// Logs a game win for [uid], awards 50 XP.
+  /// At 3 wins, unlocks the 🏆 game_champion badge + 🎮 avatar.
+  Future<void> logGameWin(String uid, String householdId,
+      {String? gameName}) async {
+    final ref = _db.collection('users').doc(uid);
+    final doc = await ref.get();
+    if (!doc.exists) return;
+    final data = doc.data() as Map<String, dynamic>;
+
+    final currentWins = (data['gameWins'] as int?) ?? 0;
+    final newWins = currentWins + 1;
+    final badges = List<String>.from(data['badges'] ?? []);
+    final unlocked = List<String>.from(data['unlockedAvatars'] ?? []);
+
+    final updates = <String, dynamic>{'gameWins': newWins};
+
+    // Unlock badge + avatar at 3 wins
+    if (newWins >= 3 && !badges.contains('game_champion')) {
+      badges.add('game_champion');
+      updates['badges'] = badges;
+      if (!unlocked.contains('🎮')) {
+        unlocked.add('🎮');
+        updates['unlockedAvatars'] = unlocked;
+      }
+    }
+
+    await ref.update(updates);
+    await XpService().awardGameWin(uid, householdId, gameName: gameName);
+  }
 }

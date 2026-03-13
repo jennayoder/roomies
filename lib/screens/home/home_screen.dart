@@ -85,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
           return _HouseholdDashboard(
             householdId: user.householdId!,
             currentUid: auth.currentUser?.uid ?? '',
+            userProfile: user,
             onSwitchTab: widget.onSwitchTab,
           );
         },
@@ -241,11 +242,13 @@ class _NoHouseholdViewState extends State<_NoHouseholdView> {
 class _HouseholdDashboard extends StatelessWidget {
   final String householdId;
   final String currentUid;
+  final UserModel userProfile;
   final void Function(int)? onSwitchTab;
 
   const _HouseholdDashboard({
     required this.householdId,
     required this.currentUid,
+    required this.userProfile,
     this.onSwitchTab,
   });
 
@@ -341,7 +344,19 @@ class _HouseholdDashboard extends StatelessWidget {
               ),
             ),
 
-            // ── Quick access row (Rent only) ───────────────────────────
+            // ── Daily check-in banner ──────────────────────────────────
+            if (!userProfile.checkedInToday)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: _CheckInBanner(
+                    currentUid: currentUid,
+                    householdId: householdId,
+                  ),
+                ),
+              ),
+
+            // ── Quick access row ───────────────────────────────────────
             if (canSeeRent) ...[
               SliverToBoxAdapter(
                 child: Padding(
@@ -370,6 +385,17 @@ class _HouseholdDashboard extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                             builder: (_) => const RentScreen()),
+                      ),
+                    ),
+                    _TappableCard(
+                      icon: Icons.sports_esports,
+                      label: 'Log Game Win',
+                      subtitle: '+50 XP · 3 wins = badge',
+                      color: const Color(0xFF7B1FA2),
+                      onTap: () => _showLogGameWinSheet(
+                        context,
+                        householdId: householdId,
+                        currentUid: currentUid,
                       ),
                     ),
                   ],
@@ -404,7 +430,10 @@ class _HouseholdDashboard extends StatelessWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                child: _MiniLeaderboard(householdId: householdId),
+                child: _MiniLeaderboard(
+                  householdId: householdId,
+                  currentUid: currentUid,
+                ),
               ),
             ),
 
@@ -797,7 +826,9 @@ class _ExpandableMembersCardState extends State<_ExpandableMembersCard> {
 
 class _MiniLeaderboard extends StatefulWidget {
   final String householdId;
-  const _MiniLeaderboard({required this.householdId});
+  final String currentUid;
+  const _MiniLeaderboard(
+      {required this.householdId, required this.currentUid});
 
   @override
   State<_MiniLeaderboard> createState() => _MiniLeaderboardState();
@@ -810,6 +841,13 @@ class _MiniLeaderboardState extends State<_MiniLeaderboard> {
   void initState() {
     super.initState();
     _future = FirestoreService().getHouseholdMembers(widget.householdId);
+  }
+
+  String _rankLabel(int i) {
+    if (i == 0) return '🥇';
+    if (i == 1) return '🥈';
+    if (i == 2) return '🥉';
+    return '#${i + 1}';
   }
 
   @override
@@ -828,12 +866,11 @@ class _MiniLeaderboardState extends State<_MiniLeaderboard> {
         }
         final sorted = [...snapshot.data!]
           ..sort((a, b) => b.$1.totalXp.compareTo(a.$1.totalXp));
-        final top = sorted.take(3).toList();
 
         return Card(
           child: Column(
             children: [
-              for (int i = 0; i < top.length; i++) ...[
+              for (int i = 0; i < sorted.length; i++) ...[
                 if (i > 0) const Divider(height: 1),
                 ListTile(
                   dense: true,
@@ -841,27 +878,58 @@ class _MiniLeaderboardState extends State<_MiniLeaderboard> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => MemberDetailScreen(
-                        user: top[i].$1,
-                        role: top[i].$2 as HouseholdRole,
+                        user: sorted[i].$1,
+                        role: sorted[i].$2 as HouseholdRole,
                       ),
                     ),
                   ),
-                  leading: Text(
-                    ['🥇', '🥈', '🥉'][i],
-                    style: const TextStyle(fontSize: 20),
+                  leading: SizedBox(
+                    width: 36,
+                    child: Text(
+                      _rankLabel(i),
+                      style: TextStyle(
+                        fontSize: i < 3 ? 20 : 14,
+                        fontWeight: i < 3 ? FontWeight.bold : FontWeight.normal,
+                        color: i >= 3 ? colors.onSurfaceVariant : null,
+                      ),
+                    ),
                   ),
-                  title: Text(
-                    top[i].$1.displayName,
-                    style: textTheme.bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                  title: Row(
+                    children: [
+                      Text(
+                        sorted[i].$1.displayName,
+                        style: textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: sorted[i].$1.uid == widget.currentUid
+                              ? colors.primary
+                              : null,
+                        ),
+                      ),
+                      if (sorted[i].$1.checkedInToday) ...[
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: 'Checked in today',
+                          child: Text('☀️',
+                              style: const TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                      if (sorted[i].$1.badges.contains('game_champion')) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: 'Game Champion',
+                          child: Text('🏆',
+                              style: const TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ],
                   ),
                   subtitle: Text(
-                    '${LevelSystem.infoFor(top[i].$1.level).emoji} '
-                    '${top[i].$1.title ?? LevelSystem.infoFor(top[i].$1.level).title}',
+                    '${LevelSystem.infoFor(sorted[i].$1.level).emoji} '
+                    '${sorted[i].$1.title ?? LevelSystem.infoFor(sorted[i].$1.level).title}',
                     style: textTheme.bodySmall,
                   ),
                   trailing: Text(
-                    '${top[i].$1.totalXp} XP',
+                    '${sorted[i].$1.totalXp} XP',
                     style: textTheme.labelLarge?.copyWith(
                       color: colors.primary,
                       fontWeight: FontWeight.bold,
@@ -924,4 +992,145 @@ class _StatCard extends StatelessWidget {
       ),
     );
   }
+}
+
+
+// ─── Check-in banner ──────────────────────────────────────────────────────────
+
+class _CheckInBanner extends StatefulWidget {
+  final String currentUid;
+  final String householdId;
+  const _CheckInBanner(
+      {required this.currentUid, required this.householdId});
+
+  @override
+  State<_CheckInBanner> createState() => _CheckInBannerState();
+}
+
+class _CheckInBannerState extends State<_CheckInBanner> {
+  bool _done = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_done) return const SizedBox.shrink();
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      color: colors.secondaryContainer,
+      child: ListTile(
+        leading: const Text('☀️', style: TextStyle(fontSize: 28)),
+        title: const Text('Daily Check-In',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: const Text('Tap to check in and earn +5 XP'),
+        trailing: FilledButton(
+          onPressed: () async {
+            final checked = await FirestoreService()
+                .dailyCheckIn(widget.currentUid);
+            if (checked && context.mounted) {
+              setState(() => _done = true);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('☀️ Checked in! +5 XP'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+          child: const Text('Check In'),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Log game win sheet ───────────────────────────────────────────────────────
+
+Future<void> _showLogGameWinSheet(
+  BuildContext context, {
+  required String householdId,
+  required String currentUid,
+}) async {
+  final allMembers =
+      await FirestoreService().getHouseholdMembers(householdId);
+  if (!context.mounted) return;
+
+  final gameCtrl = TextEditingController();
+  String? selectedUid = currentUid;
+
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('🏆 Log Game Win',
+                style: Theme.of(ctx).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text('+50 XP · Unlock 🎮 avatar at 3 wins',
+                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color:
+                        Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: selectedUid,
+              decoration: const InputDecoration(
+                labelText: 'Winner',
+                border: OutlineInputBorder(),
+              ),
+              items: allMembers
+                  .map((m) => DropdownMenuItem(
+                        value: m.$1.uid,
+                        child: Text(m.$1.uid == currentUid
+                            ? '${m.$1.displayName} (you)'
+                            : m.$1.displayName),
+                      ))
+                  .toList(),
+              onChanged: (v) => setS(() => selectedUid = v),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: gameCtrl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Game name (optional)',
+                hintText: 'e.g. Monopoly, Mario Kart…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () async {
+                if (selectedUid == null) return;
+                await FirestoreService().logGameWin(
+                  selectedUid!,
+                  householdId,
+                  gameName: gameCtrl.text.trim().isEmpty
+                      ? null
+                      : gameCtrl.text.trim(),
+                );
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('🏆 Game win logged! +50 XP')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.emoji_events),
+              label: const Text('Log Win'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
