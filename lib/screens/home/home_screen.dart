@@ -390,7 +390,7 @@ class _HouseholdDashboard extends StatelessWidget {
                     _TappableCard(
                       icon: Icons.sports_esports,
                       label: 'Log Game Win',
-                      subtitle: '+50 XP · 3 wins = badge',
+                      subtitle: 'Award +50 XP to a winner',
                       color: const Color(0xFF7B1FA2),
                       onTap: () => _showLogGameWinSheet(
                         context,
@@ -1074,11 +1074,6 @@ Future<void> _showLogGameWinSheet(
           children: [
             Text('🏆 Log Game Win',
                 style: Theme.of(ctx).textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text('+50 XP · Unlock 🎮 avatar at 3 wins',
-                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                    color:
-                        Theme.of(ctx).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               value: selectedUid,
