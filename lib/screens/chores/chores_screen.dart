@@ -131,16 +131,22 @@ class _CombinedChoresList extends StatelessWidget {
             final allChores = choreSnap.data ?? [];
             final tasks = taskSnap.data ?? [];
 
-            // Filter chores by assignee unless showAll
-            final chores = showAll
-                ? allChores
-                : allChores
-                    .where((c) =>
+            // Pending: filter by assignee unless showAll
+            // Done: always show all — everyone should see what's been completed
+            final pendingChores = (showAll
+                    ? allChores
+                    : allChores.where((c) =>
                         c.assignedToId == null ||
-                        c.assignedToId == currentUid)
-                    .toList();
+                        c.assignedToId == currentUid ||
+                        c.isRepeatable))
+                .where((c) => !c.isCompleted || c.isRepeatable)
+                .toList();
 
-            if (chores.isEmpty && tasks.isEmpty) {
+            final doneChores = allChores
+                .where((c) => c.isCompleted && !c.isRepeatable)
+                .toList();
+
+            if (pendingChores.isEmpty && doneChores.isEmpty && tasks.isEmpty) {
               return EmptyState(
                 icon: Icons.checklist_outlined,
                 title: showAll ? 'No chores yet' : 'No chores assigned to you',
@@ -149,9 +155,6 @@ class _CombinedChoresList extends StatelessWidget {
                     : 'Tap "All" to see everyone\'s chores.',
               );
             }
-
-            final pendingChores = chores.where((c) => !c.isCompleted || c.isRepeatable).toList();
-            final doneChores = chores.where((c) => c.isCompleted && !c.isRepeatable).toList();
             final needsApproval = tasks
                 .where((t) =>
                     t.isComplete &&
@@ -268,7 +271,7 @@ class _ChoresList extends StatelessWidget {
         }
 
         final pending = chores.where((c) => !c.isCompleted || c.isRepeatable).toList();
-        final done = chores.where((c) => c.isCompleted && !c.isRepeatable).toList();
+        final done = snapshot.data!.where((c) => c.isCompleted && !c.isRepeatable).toList();
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
