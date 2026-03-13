@@ -150,8 +150,8 @@ class _CombinedChoresList extends StatelessWidget {
               );
             }
 
-            final pendingChores = chores.where((c) => !c.isCompleted).toList();
-            final doneChores = chores.where((c) => c.isCompleted).toList();
+            final pendingChores = chores.where((c) => !c.isCompleted || c.isRepeatable).toList();
+            final doneChores = chores.where((c) => c.isCompleted && !c.isRepeatable).toList();
             final needsApproval = tasks
                 .where((t) =>
                     t.isComplete &&
@@ -267,8 +267,8 @@ class _ChoresList extends StatelessWidget {
           );
         }
 
-        final pending = chores.where((c) => !c.isCompleted).toList();
-        final done = chores.where((c) => c.isCompleted).toList();
+        final pending = chores.where((c) => !c.isCompleted || c.isRepeatable).toList();
+        final done = chores.where((c) => c.isCompleted && !c.isRepeatable).toList();
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
