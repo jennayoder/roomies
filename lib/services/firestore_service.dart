@@ -106,6 +106,29 @@ class FirestoreService {
     await _expenses(householdId).doc(expenseId).delete();
   }
 
+  /// Marks one member's portion of an expense as paid.
+  /// If all members have paid, marks the whole expense as settled.
+  Future<void> markExpenseMemberPaid(
+      String householdId, String expenseId, String uid) async {
+    final ref = _expenses(householdId).doc(expenseId);
+    final doc = await ref.get();
+    if (!doc.exists) return;
+
+    final expense = Expense.fromDoc(doc);
+    final newPaidStatus = Map<String, bool>.from(expense.paidStatus)
+      ..[uid] = true;
+
+    final allPaid =
+        expense.memberAmounts.keys.every((k) => newPaidStatus[k] == true);
+
+    await ref.update({
+      'paidStatus.$uid': true,
+      if (allPaid) 'isSettled': true,
+    });
+
+    await XpService().awardExpensePaid(uid, householdId);
+  }
+
   // ─── Chores ────────────────────────────────────────────────────────────────
 
   Stream<List<Chore>> choresStream(String householdId) {

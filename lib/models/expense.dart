@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Categories for shared household expenses.
 enum ExpenseCategory {
   groceries,
   utilities,
@@ -27,18 +26,25 @@ extension ExpenseCategoryLabel on ExpenseCategory {
 class Expense {
   final String id;
   final String title;
+
+  /// Total expense amount.
   final double amount;
+
   final ExpenseCategory category;
 
-  /// UID of the member who paid for the expense.
+  /// UID of the member who paid/fronted the expense.
   final String paidById;
 
-  /// UIDs of members who should share this expense.
-  final List<String> splitAmongIds;
+  /// Per-member amounts owed: { uid: amount }.
+  /// Members not in this map don't owe anything.
+  final Map<String, double> memberAmounts;
+
+  /// Per-member paid status: { uid: true/false }.
+  final Map<String, bool> paidStatus;
 
   final DateTime createdAt;
 
-  /// Whether this expense has been settled among all members.
+  /// True when all members in memberAmounts have paid.
   final bool isSettled;
 
   const Expense({
@@ -47,19 +53,34 @@ class Expense {
     required this.amount,
     required this.category,
     required this.paidById,
-    required this.splitAmongIds,
+    required this.memberAmounts,
+    this.paidStatus = const {},
     required this.createdAt,
     this.isSettled = false,
   });
 
-  /// The per-person share for this expense.
-  double get sharePerPerson =>
-      splitAmongIds.isEmpty ? 0 : amount / splitAmongIds.length;
-
-  // ─── Firestore serialization ───────────────────────────────────────────────
+  /// Legacy: keep splitAmongIds derived from memberAmounts keys.
+  List<String> get splitAmongIds => memberAmounts.keys.toList();
 
   factory Expense.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+
+    // Support both old splitAmongIds + amount and new memberAmounts
+    Map<String, double> memberAmounts;
+    if (data['memberAmounts'] != null) {
+      memberAmounts = Map<String, double>.from(
+        (data['memberAmounts'] as Map).map(
+          (k, v) => MapEntry(k as String, (v as num).toDouble()),
+        ),
+      );
+    } else {
+      // Legacy: equal split
+      final ids = List<String>.from(data['splitAmongIds'] as List? ?? []);
+      final total = (data['amount'] as num).toDouble();
+      final share = ids.isEmpty ? total : total / ids.length;
+      memberAmounts = {for (final id in ids) id: share};
+    }
+
     return Expense(
       id: doc.id,
       title: data['title'] as String,
@@ -69,7 +90,14 @@ class Expense {
         orElse: () => ExpenseCategory.other,
       ),
       paidById: data['paidById'] as String,
-      splitAmongIds: List<String>.from(data['splitAmongIds'] as List),
+      memberAmounts: memberAmounts,
+      paidStatus: data['paidStatus'] != null
+          ? Map<String, bool>.from(
+              (data['paidStatus'] as Map).map(
+                (k, v) => MapEntry(k as String, v as bool),
+              ),
+            )
+          : {},
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       isSettled: (data['isSettled'] as bool?) ?? false,
     );
@@ -80,7 +108,9 @@ class Expense {
         'amount': amount,
         'category': category.name,
         'paidById': paidById,
-        'splitAmongIds': splitAmongIds,
+        'memberAmounts': memberAmounts,
+        'splitAmongIds': splitAmongIds, // legacy compat
+        'paidStatus': paidStatus,
         'createdAt': Timestamp.fromDate(createdAt),
         'isSettled': isSettled,
       };
