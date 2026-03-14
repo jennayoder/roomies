@@ -26,6 +26,9 @@ class RentEntry {
   /// Per-member paid status: { uid: true/false }
   final Map<String, bool> paidStatus;
 
+  /// Per-member timestamp of when they marked their share paid: { uid: DateTime }
+  final Map<String, DateTime> paidDates;
+
   /// Whether this rent repeats monthly.
   final bool isRecurring;
 
@@ -41,6 +44,7 @@ class RentEntry {
     required this.createdAt,
     this.isFullyPaid = false,
     this.paidStatus = const {},
+    this.paidDates = const {},
     this.isRecurring = false,
     this.recurringDay,
   });
@@ -68,6 +72,14 @@ class RentEntry {
               ),
             )
           : {},
+      paidDates: data['paidDates'] != null
+          ? Map<String, DateTime>.from(
+              (data['paidDates'] as Map).map(
+                (k, v) => MapEntry(
+                    k as String, (v as Timestamp).toDate()),
+              ),
+            )
+          : {},
       isRecurring: (data['isRecurring'] as bool?) ?? false,
       recurringDay: data['recurringDay'] as int?,
     );
@@ -81,6 +93,7 @@ class RentEntry {
         'createdAt': Timestamp.fromDate(createdAt),
         'isFullyPaid': isFullyPaid,
         'paidStatus': paidStatus,
+        'paidDates': paidDates.map((k, v) => MapEntry(k, Timestamp.fromDate(v))),
         'isRecurring': isRecurring,
         'recurringDay': recurringDay,
       };

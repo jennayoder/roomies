@@ -15,6 +15,7 @@ import '../../widgets/loading_widget.dart';
 
 final _currencyFmt = NumberFormat.currency(symbol: '\$');
 final _periodFmt = DateFormat('MMMM yyyy');
+final _paidDateFmt = DateFormat('MMM d, yyyy');
 
 class RentScreen extends StatelessWidget {
   const RentScreen({super.key});
@@ -101,25 +102,57 @@ class _RentContent extends StatelessWidget {
                 );
               }
 
-              return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                itemCount: entries.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, i) => _RentEntryCard(
-                  entry: entries[i],
-                  householdId: householdId,
-                  currentUid: currentUid,
-                  isOwner: isOwner,
-                  service: service,
-                  onTap: () => _showRentDetailSheet(
-                    context,
-                    entry: entries[i],
+              // For non-owners, "unpaid" = their own share unpaid
+              final unpaid = entries.where((e) {
+                if (isOwner) return !e.isFullyPaid;
+                return !(e.paidStatus[currentUid] ?? false);
+              }).toList();
+              final paid = entries.where((e) {
+                if (isOwner) return e.isFullyPaid;
+                return e.paidStatus[currentUid] ?? false;
+              }).toList();
+
+              Widget buildCard(RentEntry entry) => _RentEntryCard(
+                    entry: entry,
                     householdId: householdId,
                     currentUid: currentUid,
                     isOwner: isOwner,
                     service: service,
-                  ),
-                ),
+                    onTap: () => _showRentDetailSheet(
+                      context,
+                      entry: entry,
+                      householdId: householdId,
+                      currentUid: currentUid,
+                      isOwner: isOwner,
+                      service: service,
+                    ),
+                  );
+
+              Widget sectionHeader(String title) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                    ),
+                  );
+
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                children: [
+                  if (unpaid.isNotEmpty) ...[
+                    sectionHeader('Unpaid'),
+                    ...unpaid.map(buildCard),
+                  ],
+                  if (paid.isNotEmpty) ...[
+                    if (unpaid.isNotEmpty) const SizedBox(height: 16),
+                    sectionHeader('Paid'),
+                    ...paid.map(buildCard),
+                  ],
+                ],
               );
             },
           ),
@@ -128,6 +161,8 @@ class _RentContent extends StatelessWidget {
     );
   }
 }
+
+
 
 // ─── Rent entry card ──────────────────────────────────────────────────────────
 
@@ -217,6 +252,7 @@ class _RentEntryCard extends StatelessWidget {
               const SizedBox(height: 8),
               ...entry.memberShares.entries.map((e) {
                 final paid = entry.paidStatus[e.key] ?? false;
+                final paidOn = entry.paidDates[e.key];
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
@@ -228,7 +264,18 @@ class _RentEntryCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: _MemberName(uid: e.key, householdId: householdId),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _MemberName(uid: e.key, householdId: householdId),
+                            if (paid && paidOn != null)
+                              Text(
+                                'Paid ${_paidDateFmt.format(paidOn)}',
+                                style: textTheme.bodySmall?.copyWith(
+                                    color: colors.primary),
+                              ),
+                          ],
+                        ),
                       ),
                       Text(
                         _currencyFmt.format(e.value),
@@ -293,9 +340,15 @@ class _RentEntryCard extends StatelessWidget {
                 children: [
                   Icon(Icons.check_circle, color: colors.primary, size: 18),
                   const SizedBox(width: 6),
-                  Text('You paid ✅',
+                  Expanded(
+                    child: Text(
+                      entry.paidDates[currentUid] != null
+                          ? 'Paid on ${_paidDateFmt.format(entry.paidDates[currentUid]!)} ✅'
+                          : 'You paid ✅',
                       style: textTheme.bodyMedium
-                          ?.copyWith(color: colors.primary)),
+                          ?.copyWith(color: colors.primary),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -427,6 +480,7 @@ class _RentDetailSheet extends StatelessWidget {
           // Member shares with paid status
           ...entry.memberShares.entries.map((e) {
             final paid = entry.paidStatus[e.key] ?? false;
+            final paidOn = entry.paidDates[e.key];
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(
@@ -438,7 +492,18 @@ class _RentDetailSheet extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _MemberName(uid: e.key, householdId: householdId),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _MemberName(uid: e.key, householdId: householdId),
+                        if (paid && paidOn != null)
+                          Text(
+                            _paidDateFmt.format(paidOn),
+                            style: textTheme.bodySmall?.copyWith(
+                                color: colors.primary),
+                          ),
+                      ],
+                    ),
                   ),
                   Text(
                     _currencyFmt.format(e.value),

@@ -78,6 +78,7 @@ class FirestoreService {
 
     await ref.update({
       'paidStatus.$uid': true,
+      'paidDates.$uid': Timestamp.now(),
       if (allPaid) 'isFullyPaid': true,
     });
 
