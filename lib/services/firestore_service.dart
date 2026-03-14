@@ -52,6 +52,11 @@ class FirestoreService {
     await XpService().awardRentPaidOnTime(_uid, householdId);
   }
 
+  Future<void> updateRentEntry(
+      String householdId, String entryId, Map<String, dynamic> updates) async {
+    await _rent(householdId).doc(entryId).update(updates);
+  }
+
   Future<void> deleteRentEntry(String householdId, String entryId) async {
     await _rent(householdId).doc(entryId).delete();
   }

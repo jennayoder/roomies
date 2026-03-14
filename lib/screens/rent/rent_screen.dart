@@ -485,48 +485,224 @@ class _RentDetailSheet extends StatelessWidget {
             ),
           ],
 
-          // Owner: delete
+          // Owner: edit + delete
           if (isOwner) ...[
             const SizedBox(height: 12),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: colors.error,
-                side: BorderSide(color: colors.error),
-              ),
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (dCtx) => AlertDialog(
-                    title: const Text('Delete rent entry?'),
-                    content: const Text(
-                        'This will permanently remove this rent entry.'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dCtx, false),
-                        child: const Text('Cancel'),
-                      ),
-                      FilledButton(
-                        style: FilledButton.styleFrom(
-                            backgroundColor: colors.error),
-                        onPressed: () => Navigator.pop(dCtx, true),
-                        child: const Text('Delete'),
-                      ),
-                    ],
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showEditRentSheet(
+                        context,
+                        entry: entry,
+                        householdId: householdId,
+                        service: service,
+                      );
+                    },
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit'),
                   ),
-                );
-                if (confirm == true) {
-                  await service.deleteRentEntry(householdId, entry.id);
-                  if (context.mounted) Navigator.pop(context);
-                }
-              },
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Delete Entry'),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colors.error,
+                      side: BorderSide(color: colors.error),
+                    ),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (dCtx) => AlertDialog(
+                          title: const Text('Delete rent entry?'),
+                          content: const Text(
+                              'This will permanently remove this rent entry.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dCtx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              style: FilledButton.styleFrom(
+                                  backgroundColor: colors.error),
+                              onPressed: () => Navigator.pop(dCtx, true),
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await service.deleteRentEntry(householdId, entry.id);
+                        if (context.mounted) Navigator.pop(context);
+                      }
+                    },
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Delete'),
+                  ),
+                ),
+              ],
             ),
           ],
         ],
       ),
     );
   }
+}
+
+// ─── Edit rent sheet ─────────────────────────────────────────────────────────
+
+Future<void> _showEditRentSheet(
+  BuildContext context, {
+  required RentEntry entry,
+  required String householdId,
+  required FirestoreService service,
+}) async {
+  // Build per-member amount controllers pre-filled with existing values
+  final amountCtrls = <String, TextEditingController>{
+    for (final e in entry.memberShares.entries)
+      e.key: TextEditingController(text: e.value.toStringAsFixed(2)),
+  };
+
+  // Fetch member names for display
+  final allMembers = await FirestoreService().getHouseholdMembers(householdId);
+  if (!context.mounted) return;
+
+  bool isRecurring = entry.isRecurring;
+  int recurringDay = entry.recurringDay ?? 1;
+
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => SingleChildScrollView(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+
+            Text(
+              'Edit Rent — ${_periodFmt.format(DateFormat('yyyy-MM').parse(entry.period))}',
+              style: Theme.of(ctx).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+
+            // Per-member amounts
+            Text(
+              'Member shares',
+              style: Theme.of(ctx).textTheme.labelMedium?.copyWith(
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            ...entry.memberShares.keys.map((uid) {
+              final memberName = allMembers
+                  .where((m) => m.$1.uid == uid)
+                  .map((m) => m.$1.displayName)
+                  .firstOrNull ?? uid;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(memberName)),
+                    SizedBox(
+                      width: 130,
+                      child: TextField(
+                        controller: amountCtrls[uid],
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          prefixText: '\$ ',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 10),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            const SizedBox(height: 4),
+
+            // Recurring toggle
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: isRecurring,
+              title: const Text('🔁 Recurring monthly'),
+              subtitle: isRecurring
+                  ? Text('Repeats on day $recurringDay each month')
+                  : const Text('One-time entry'),
+              onChanged: (v) => setS(() => isRecurring = v),
+            ),
+            if (isRecurring) ...[
+              Text('Day of month: $recurringDay',
+                  style: Theme.of(ctx).textTheme.bodySmall),
+              Slider(
+                value: recurringDay.toDouble(),
+                min: 1,
+                max: 28,
+                divisions: 27,
+                label: 'Day $recurringDay',
+                onChanged: (v) => setS(() => recurringDay = v.round()),
+              ),
+            ],
+
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () async {
+                final newShares = <String, double>{};
+                for (final e in amountCtrls.entries) {
+                  final amt = double.tryParse(e.value.text.trim());
+                  if (amt != null && amt > 0) newShares[e.key] = amt;
+                }
+                if (newShares.isEmpty) return;
+                final total =
+                    newShares.values.fold(0.0, (a, b) => a + b);
+
+                await service.updateRentEntry(householdId, entry.id, {
+                  'totalAmount': total,
+                  'memberShares': newShares,
+                  'isRecurring': isRecurring,
+                  'recurringDay': isRecurring ? recurringDay : null,
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 // ─── Member name resolver ─────────────────────────────────────────────────────
