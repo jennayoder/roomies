@@ -1,18 +1,22 @@
 import 'dart:html' as html;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/event.dart';
+import '../../models/household.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../services/household_service.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_widget.dart';
 
 final _dateTimeFmt = DateFormat('EEE, MMM d · h:mm a');
+final _dateFmt = DateFormat.yMMMd();
 
 /// Builds a Google Calendar "add event" URL for [event].
 /// Opens Google Calendar (web or app) with all fields pre-filled — no OAuth needed.
@@ -95,50 +99,60 @@ class _EventsContent extends StatelessWidget {
         icon: const Icon(Icons.add),
         label: const Text('Add Event'),
       ),
-      body: StreamBuilder<List<Event>>(
-        stream: service.eventsStream(householdId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingWidget(message: 'Loading events…');
-          }
+      body: StreamBuilder<Household?>(
+        stream: HouseholdService().householdStream(householdId),
+        builder: (context, householdSnap) {
+          final isOwner =
+              householdSnap.data?.members[currentUid] == HouseholdRole.owner;
 
-          final events = snapshot.data ?? [];
-          if (events.isEmpty) {
-            return const EmptyState(
-              icon: Icons.event_outlined,
-              title: 'No events yet',
-              subtitle: 'Tap "Add Event" to schedule something.',
-            );
-          }
+          return StreamBuilder<List<Event>>(
+            stream: service.eventsStream(householdId),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const LoadingWidget(message: 'Loading events…');
+              }
 
-          final upcoming = events.where((e) => e.isUpcoming).toList();
-          final past = events.where((e) => !e.isUpcoming).toList();
+              final events = snapshot.data ?? [];
+              if (events.isEmpty) {
+                return const EmptyState(
+                  icon: Icons.event_outlined,
+                  title: 'No events yet',
+                  subtitle: 'Tap "Add Event" to schedule something.',
+                );
+              }
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-            children: [
-              if (upcoming.isNotEmpty) ...[
-                _sectionHeader(context, 'Upcoming'),
-                const SizedBox(height: 8),
-                ...upcoming.map((e) => _EventCard(
-                      event: e,
-                      currentUid: currentUid,
-                      householdId: householdId,
-                      service: service,
-                    )),
-              ],
-              if (past.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                _sectionHeader(context, 'Past'),
-                const SizedBox(height: 8),
-                ...past.map((e) => _EventCard(
-                      event: e,
-                      currentUid: currentUid,
-                      householdId: householdId,
-                      service: service,
-                    )),
-              ],
-            ],
+              final upcoming = events.where((e) => e.isUpcoming).toList();
+              final past = events.where((e) => !e.isUpcoming).toList();
+
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                children: [
+                  if (upcoming.isNotEmpty) ...[
+                    _sectionHeader(context, 'Upcoming'),
+                    const SizedBox(height: 8),
+                    ...upcoming.map((e) => _EventCard(
+                          event: e,
+                          currentUid: currentUid,
+                          householdId: householdId,
+                          isOwner: isOwner,
+                          service: service,
+                        )),
+                  ],
+                  if (past.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _sectionHeader(context, 'Past'),
+                    const SizedBox(height: 8),
+                    ...past.map((e) => _EventCard(
+                          event: e,
+                          currentUid: currentUid,
+                          householdId: householdId,
+                          isOwner: isOwner,
+                          service: service,
+                        )),
+                  ],
+                ],
+              );
+            },
           );
         },
       ),
@@ -160,12 +174,14 @@ class _EventCard extends StatefulWidget {
   final Event event;
   final String currentUid;
   final String householdId;
+  final bool isOwner;
   final FirestoreService service;
 
   const _EventCard({
     required this.event,
     required this.currentUid,
     required this.householdId,
+    required this.isOwner,
     required this.service,
   });
 
@@ -238,11 +254,25 @@ class _EventCardState extends State<_EventCard> {
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.delete_outlined, color: colors.error),
-                  onPressed: () =>
-                      widget.service.deleteEvent(widget.householdId, widget.event.id),
-                ),
+                // Edit + delete for owner or creator
+                if (widget.isOwner || widget.event.createdById == widget.currentUid) ...[
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Edit event',
+                    onPressed: () => _showEditEventSheet(
+                      context,
+                      event: widget.event,
+                      householdId: widget.householdId,
+                      service: widget.service,
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.delete_outlined, color: colors.error),
+                    tooltip: 'Delete event',
+                    onPressed: () => widget.service
+                        .deleteEvent(widget.householdId, widget.event.id),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 4),
@@ -324,6 +354,131 @@ class _EventCardState extends State<_EventCard> {
       ),
     );
   }
+}
+
+// ─── Add event sheet ──────────────────────────────────────────────────────────
+
+// ─── Edit event sheet ─────────────────────────────────────────────────────────
+
+Future<void> _showEditEventSheet(
+  BuildContext context, {
+  required Event event,
+  required String householdId,
+  required FirestoreService service,
+}) async {
+  final titleCtrl = TextEditingController(text: event.title);
+  final descCtrl = TextEditingController(text: event.description ?? '');
+  final locationCtrl = TextEditingController(text: event.location ?? '');
+  DateTime selectedDate = event.dateTime;
+  TimeOfDay selectedTime =
+      TimeOfDay(hour: event.dateTime.hour, minute: event.dateTime.minute);
+
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Edit Event',
+                style: Theme.of(ctx).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            TextField(
+              controller: titleCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Title *',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: locationCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Location',
+                prefixIcon: Icon(Icons.place_outlined),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final d = await showDatePicker(
+                  context: ctx,
+                  initialDate: selectedDate,
+                  firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                  lastDate: DateTime.now().add(const Duration(days: 730)),
+                );
+                if (d != null) setS(() => selectedDate = d);
+              },
+              icon: const Icon(Icons.calendar_today),
+              label: Text(_dateFmt.format(selectedDate)),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final t = await showTimePicker(
+                  context: ctx,
+                  initialTime: selectedTime,
+                );
+                if (t != null) setS(() => selectedTime = t);
+              },
+              icon: const Icon(Icons.access_time),
+              label: Text(selectedTime.format(ctx)),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: () async {
+                final title = titleCtrl.text.trim();
+                if (title.isEmpty) return;
+                final dateTime = DateTime(
+                  selectedDate.year,
+                  selectedDate.month,
+                  selectedDate.day,
+                  selectedTime.hour,
+                  selectedTime.minute,
+                );
+                await service.updateEvent(householdId, event.id, {
+                  'title': title,
+                  'description': descCtrl.text.trim().isEmpty
+                      ? null
+                      : descCtrl.text.trim(),
+                  'location': locationCtrl.text.trim().isEmpty
+                      ? null
+                      : locationCtrl.text.trim(),
+                  'dateTime': Timestamp.fromDate(dateTime),
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 // ─── Add event sheet ──────────────────────────────────────────────────────────

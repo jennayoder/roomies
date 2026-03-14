@@ -259,6 +259,11 @@ class FirestoreService {
     });
   }
 
+  Future<void> updateEvent(String householdId, String eventId,
+      Map<String, dynamic> updates) async {
+    await _events(householdId).doc(eventId).update(updates);
+  }
+
   Future<void> deleteEvent(String householdId, String eventId) async {
     await _events(householdId).doc(eventId).delete();
   }
