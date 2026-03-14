@@ -263,6 +263,19 @@ class FirestoreService {
     await _events(householdId).doc(eventId).delete();
   }
 
+  Future<void> setCalendarEventId(
+      String householdId, String eventId, String uid, String? calendarId) async {
+    if (calendarId != null) {
+      await _events(householdId)
+          .doc(eventId)
+          .update({'calendarEventIds.$uid': calendarId});
+    } else {
+      await _events(householdId)
+          .doc(eventId)
+          .update({'calendarEventIds.$uid': FieldValue.delete()});
+    }
+  }
+
   // ─── Member management ─────────────────────────────────────────────────────
 
   /// Fetches all members of [householdId] with their roles.

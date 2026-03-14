@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../models/event.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/google_calendar_service.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_widget.dart';
 
@@ -155,7 +156,7 @@ class _EventsContent extends StatelessWidget {
   }
 }
 
-class _EventCard extends StatelessWidget {
+class _EventCard extends StatefulWidget {
   final Event event;
   final String currentUid;
   final String householdId;
@@ -169,10 +170,57 @@ class _EventCard extends StatelessWidget {
   });
 
   @override
+  State<_EventCard> createState() => _EventCardState();
+}
+
+class _EventCardState extends State<_EventCard> {
+  bool _calendarLoading = false;
+
+  Future<void> _handleRsvp(bool isAttending) async {
+    setState(() => _calendarLoading = true);
+    try {
+      if (!isAttending) {
+        // Going from not attending → attending
+        await widget.service.rsvpEvent(widget.householdId, widget.event.id, true);
+        final calendarService = GoogleCalendarService();
+        final calendarEventId = await calendarService.addEvent(widget.event);
+        if (calendarEventId != null) {
+          await widget.service.setCalendarEventId(
+              widget.householdId, widget.event.id, widget.currentUid, calendarEventId);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(calendarEventId != null
+                ? "You're in! 🎉 Added to Google Calendar."
+                : "You're in! 🎉"),
+          ));
+        }
+      } else {
+        // Going from attending → not attending
+        final existingCalendarId = widget.event.calendarEventIds[widget.currentUid];
+        await widget.service.rsvpEvent(widget.householdId, widget.event.id, false);
+        if (existingCalendarId != null) {
+          final calendarService = GoogleCalendarService();
+          await calendarService.removeEvent(existingCalendarId);
+        }
+        await widget.service.setCalendarEventId(
+            widget.householdId, widget.event.id, widget.currentUid, null);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Removed from your calendar.')),
+          );
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _calendarLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final isAttending = event.attendeeIds.contains(currentUid);
+    final isAttending = widget.event.attendeeIds.contains(widget.currentUid);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -185,7 +233,7 @@ class _EventCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    event.title,
+                    widget.event.title,
                     style: textTheme.titleMedium
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
@@ -193,24 +241,23 @@ class _EventCard extends StatelessWidget {
                 IconButton(
                   icon: Icon(Icons.delete_outlined, color: colors.error),
                   onPressed: () =>
-                      service.deleteEvent(householdId, event.id),
+                      widget.service.deleteEvent(widget.householdId, widget.event.id),
                 ),
               ],
             ),
             const SizedBox(height: 4),
             Row(
               children: [
-                Icon(Icons.schedule, size: 14,
-                    color: colors.onSurfaceVariant),
+                Icon(Icons.schedule, size: 14, color: colors.onSurfaceVariant),
                 const SizedBox(width: 4),
                 Text(
-                  _dateTimeFmt.format(event.dateTime),
+                  _dateTimeFmt.format(widget.event.dateTime),
                   style: textTheme.bodySmall
                       ?.copyWith(color: colors.onSurfaceVariant),
                 ),
               ],
             ),
-            if (event.location != null) ...[
+            if (widget.event.location != null) ...[
               const SizedBox(height: 2),
               Row(
                 children: [
@@ -218,17 +265,17 @@ class _EventCard extends StatelessWidget {
                       color: colors.onSurfaceVariant),
                   const SizedBox(width: 4),
                   Text(
-                    event.location!,
+                    widget.event.location!,
                     style: textTheme.bodySmall
                         ?.copyWith(color: colors.onSurfaceVariant),
                   ),
                 ],
               ),
             ],
-            if (event.description != null) ...[
+            if (widget.event.description != null) ...[
               const SizedBox(height: 8),
               Text(
-                event.description!,
+                widget.event.description!,
                 style: textTheme.bodyMedium,
               ),
             ],
@@ -236,17 +283,17 @@ class _EventCard extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  '${event.attendeeIds.length} attending',
+                  '${widget.event.attendeeIds.length} attending',
                   style: textTheme.labelMedium
                       ?.copyWith(color: colors.onSurfaceVariant),
                 ),
                 const Spacer(),
-                // Add to Google Calendar
+                // Add to Google Calendar (manual URL open)
                 IconButton(
                   icon: const Icon(Icons.calendar_month_outlined),
                   tooltip: 'Add to Google Calendar',
                   onPressed: () {
-                    final uri = _googleCalendarUri(event);
+                    final uri = _googleCalendarUri(widget.event);
                     // Use anchor-click approach — bypasses iOS popup blocker
                     final anchor = html.AnchorElement()
                       ..href = uri.toString()
@@ -257,16 +304,18 @@ class _EventCard extends StatelessWidget {
                     anchor.remove();
                   },
                 ),
-                if (event.isUpcoming) ...[
+                if (widget.event.isUpcoming) ...[
                   const SizedBox(width: 4),
-                  FilledButton.tonal(
-                    onPressed: () => service.rsvpEvent(
-                      householdId,
-                      event.id,
-                      !isAttending,
-                    ),
-                    child: Text(isAttending ? "Can't go" : "I'm in"),
-                  ),
+                  _calendarLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : FilledButton.tonal(
+                          onPressed: () => _handleRsvp(isAttending),
+                          child: Text(isAttending ? "Can't go" : "I'm in"),
+                        ),
                 ],
               ],
             ),

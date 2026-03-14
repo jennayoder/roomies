@@ -20,6 +20,9 @@ class Event {
 
   final DateTime createdAt;
 
+  /// Maps uid → Google Calendar event ID for members who have synced this event.
+  final Map<String, String> calendarEventIds;
+
   const Event({
     required this.id,
     required this.title,
@@ -29,6 +32,7 @@ class Event {
     required this.attendeeIds,
     required this.createdById,
     required this.createdAt,
+    this.calendarEventIds = const {},
   });
 
   bool get isUpcoming => dateTime.isAfter(DateTime.now());
@@ -46,6 +50,8 @@ class Event {
       attendeeIds: List<String>.from(data['attendeeIds'] as List? ?? []),
       createdById: data['createdById'] as String,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
+      calendarEventIds: (data['calendarEventIds'] as Map<String, dynamic>? ?? {})
+          .map((k, v) => MapEntry(k, v as String)),
     );
   }
 
@@ -57,9 +63,14 @@ class Event {
         'attendeeIds': attendeeIds,
         'createdById': createdById,
         'createdAt': Timestamp.fromDate(createdAt),
+        'calendarEventIds': calendarEventIds,
       };
 
-  Event copyWith({List<String>? attendeeIds}) => Event(
+  Event copyWith({
+    List<String>? attendeeIds,
+    Map<String, String>? calendarEventIds,
+  }) =>
+      Event(
         id: id,
         title: title,
         description: description,
@@ -68,5 +79,6 @@ class Event {
         attendeeIds: attendeeIds ?? this.attendeeIds,
         createdById: createdById,
         createdAt: createdAt,
+        calendarEventIds: calendarEventIds ?? this.calendarEventIds,
       );
 }
