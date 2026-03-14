@@ -23,6 +23,7 @@ dependencies:
   # State management / utilities
   provider: ^6.1.1
   uuid: ^4.2.2
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

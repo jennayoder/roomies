@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/event.dart';
@@ -10,6 +11,34 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/loading_widget.dart';
 
 final _dateTimeFmt = DateFormat('EEE, MMM d · h:mm a');
+
+/// Builds a Google Calendar "add event" URL for [event].
+/// Opens Google Calendar (web or app) with all fields pre-filled — no OAuth needed.
+Uri _googleCalendarUri(Event event) {
+  // Format: YYYYMMDDTHHmmssZ (UTC)
+  String gcalDate(DateTime dt) {
+    final u = dt.toUtc();
+    return '${u.year.toString().padLeft(4, '0')}'
+        '${u.month.toString().padLeft(2, '0')}'
+        '${u.day.toString().padLeft(2, '0')}'
+        'T${u.hour.toString().padLeft(2, '0')}'
+        '${u.minute.toString().padLeft(2, '0')}'
+        '${u.second.toString().padLeft(2, '0')}Z';
+  }
+
+  final start = gcalDate(event.dateTime);
+  final end = gcalDate(event.dateTime.add(const Duration(hours: 1)));
+
+  return Uri.https('calendar.google.com', '/calendar/render', {
+    'action': 'TEMPLATE',
+    'text': event.title,
+    'dates': '$start/$end',
+    if (event.description != null && event.description!.isNotEmpty)
+      'details': event.description!,
+    if (event.location != null && event.location!.isNotEmpty)
+      'location': event.location!,
+  });
+}
 
 /// Events tab — household calendar / event list.
 class EventsScreen extends StatelessWidget {
@@ -211,7 +240,20 @@ class _EventCard extends StatelessWidget {
                       ?.copyWith(color: colors.onSurfaceVariant),
                 ),
                 const Spacer(),
-                if (event.isUpcoming)
+                // Add to Google Calendar
+                IconButton(
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  tooltip: 'Add to Google Calendar',
+                  onPressed: () async {
+                    final uri = _googleCalendarUri(event);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri,
+                          mode: LaunchMode.externalApplication);
+                    }
+                  },
+                ),
+                if (event.isUpcoming) ...[
+                  const SizedBox(width: 4),
                   FilledButton.tonal(
                     onPressed: () => service.rsvpEvent(
                       householdId,
@@ -220,6 +262,7 @@ class _EventCard extends StatelessWidget {
                     ),
                     child: Text(isAttending ? "Can't go" : "I'm in"),
                   ),
+                ],
               ],
             ),
           ],
