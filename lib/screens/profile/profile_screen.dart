@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/level_system.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/firestore_service.dart';
 import '../../services/theme_notifier.dart';
 import '../../services/xp_service.dart';
 import '../../widgets/loading_widget.dart';
@@ -77,12 +78,26 @@ class _ProfileContent extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  user.displayName,
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      user.displayName,
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      icon: Icon(Icons.edit_outlined,
+                          size: 18, color: colors.onSurfaceVariant),
+                      tooltip: 'Edit name',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () =>
+                          _showEditNameDialog(context, uid, user.displayName),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 Chip(
@@ -296,6 +311,60 @@ class _ProfileContent extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─── Edit display name dialog ─────────────────────────────────────────────────
+
+Future<void> _showEditNameDialog(
+  BuildContext context,
+  String uid,
+  String currentName,
+) async {
+  final ctrl = TextEditingController(text: currentName);
+  final formKey = GlobalKey<FormState>();
+
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Change display name'),
+      content: Form(
+        key: formKey,
+        child: TextFormField(
+          controller: ctrl,
+          textCapitalization: TextCapitalization.words,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Display name',
+            border: OutlineInputBorder(),
+          ),
+          validator: (v) {
+            if (v == null || v.trim().isEmpty) return 'Name can\'t be empty';
+            if (v.trim().length > 30) return 'Max 30 characters';
+            return null;
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            if (!formKey.currentState!.validate()) return;
+            final newName = ctrl.text.trim();
+            if (newName == currentName) {
+              Navigator.pop(ctx);
+              return;
+            }
+            await FirestoreService().updateDisplayName(uid, newName);
+            if (ctx.mounted) Navigator.pop(ctx);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
 }
 
 // ─── Animated XP progress bar ─────────────────────────────────────────────────

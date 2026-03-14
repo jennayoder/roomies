@@ -321,6 +321,11 @@ class FirestoreService {
     await batch.commit();
   }
 
+  /// Updates the display name for [uid] in Firestore.
+  Future<void> updateDisplayName(String uid, String displayName) async {
+    await _db.collection('users').doc(uid).update({'displayName': displayName});
+  }
+
   /// Returns the invite code for [householdId], or null if not found.
   Future<String?> getInviteCode(String householdId) async {
     final doc =
