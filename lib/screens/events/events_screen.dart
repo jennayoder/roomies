@@ -1,7 +1,8 @@
+import 'dart:html' as html;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/event.dart';
@@ -244,13 +245,16 @@ class _EventCard extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.calendar_month_outlined),
                   tooltip: 'Add to Google Calendar',
-                  onPressed: () async {
+                  onPressed: () {
                     final uri = _googleCalendarUri(event);
-                    await launchUrl(
-                      uri,
-                      mode: LaunchMode.platformDefault,
-                      webOnlyWindowName: '_blank',
-                    );
+                    // Use anchor-click approach — bypasses iOS popup blocker
+                    final anchor = html.AnchorElement()
+                      ..href = uri.toString()
+                      ..target = '_blank'
+                      ..rel = 'noopener noreferrer';
+                    html.document.body?.append(anchor);
+                    anchor.click();
+                    anchor.remove();
                   },
                 ),
                 if (event.isUpcoming) ...[
