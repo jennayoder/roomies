@@ -41,64 +41,143 @@ class ExpensesScreen extends StatelessWidget {
   }
 }
 
-class _ExpensesContent extends StatelessWidget {
+enum _ExpenseFilter { all, mine }
+
+class _ExpensesContent extends StatefulWidget {
   final String householdId;
   final String currentUid;
   const _ExpensesContent(
       {required this.householdId, required this.currentUid});
 
   @override
+  State<_ExpensesContent> createState() => _ExpensesContentState();
+}
+
+class _ExpensesContentState extends State<_ExpensesContent> {
+  _ExpenseFilter _filter = _ExpenseFilter.all;
+
+  @override
   Widget build(BuildContext context) {
     final service = FirestoreService();
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Expenses')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () =>
-            _showAddExpenseSheet(context, householdId, currentUid, service),
+        onPressed: () => _showAddExpenseSheet(
+            context, widget.householdId, widget.currentUid, service),
         icon: const Icon(Icons.add),
         label: const Text('Add Expense'),
       ),
       body: StreamBuilder<List<Expense>>(
-        stream: service.expensesStream(householdId),
+        stream: service.expensesStream(widget.householdId),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const LoadingWidget(message: 'Loading expenses…');
           }
-          final expenses = snap.data ?? [];
-          if (expenses.isEmpty) {
-            return const EmptyState(
-              icon: Icons.account_balance_wallet_outlined,
-              title: 'No expenses yet',
-              subtitle: 'Tap "Add Expense" to log a shared purchase.',
-            );
-          }
-          final unsettled = expenses.where((e) => !e.isSettled).toList();
-          final settled = expenses.where((e) => e.isSettled).toList();
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+          final all = snap.data ?? [];
+
+          // Apply filter
+          final filtered = _filter == _ExpenseFilter.mine
+              ? all
+                  .where((e) =>
+                      e.memberAmounts.containsKey(widget.currentUid) ||
+                      e.paidById == widget.currentUid)
+                  .toList()
+              : all;
+
+          // Split: unpaid on top, fully settled on bottom
+          final unpaid = filtered.where((e) => !e.isSettled).toList();
+          final settled = filtered.where((e) => e.isSettled).toList();
+
+          // Within unpaid, surface ones where current user still owes first
+          unpaid.sort((a, b) {
+            final aOwes = a.memberAmounts.containsKey(widget.currentUid) &&
+                !(a.paidStatus[widget.currentUid] ?? false);
+            final bOwes = b.memberAmounts.containsKey(widget.currentUid) &&
+                !(b.paidStatus[widget.currentUid] ?? false);
+            if (aOwes && !bOwes) return -1;
+            if (!aOwes && bOwes) return 1;
+            return b.createdAt.compareTo(a.createdAt); // newest first otherwise
+          });
+
+          // Settled: newest first
+          settled.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+          return Column(
             children: [
-              if (unsettled.isNotEmpty) ...[
-                _sectionHeader(context, 'Outstanding'),
-                const SizedBox(height: 8),
-                ...unsettled.map((e) => _ExpenseCard(
-                      expense: e,
-                      currentUid: currentUid,
-                      householdId: householdId,
-                      service: service,
-                    )),
-              ],
-              if (settled.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                _sectionHeader(context, 'Settled'),
-                const SizedBox(height: 8),
-                ...settled.map((e) => _ExpenseCard(
-                      expense: e,
-                      currentUid: currentUid,
-                      householdId: householdId,
-                      service: service,
-                    )),
-              ],
+              // ── Filter chips ──────────────────────────────────────────────
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    FilterChip(
+                      label: const Text('All'),
+                      selected: _filter == _ExpenseFilter.all,
+                      onSelected: (_) =>
+                          setState(() => _filter = _ExpenseFilter.all),
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('Mine'),
+                      selected: _filter == _ExpenseFilter.mine,
+                      onSelected: (_) =>
+                          setState(() => _filter = _ExpenseFilter.mine),
+                    ),
+                    const Spacer(),
+                    if (filtered.isNotEmpty)
+                      Text(
+                        '${filtered.length} expense${filtered.length == 1 ? '' : 's'}',
+                        style: textTheme.bodySmall
+                            ?.copyWith(color: colors.onSurfaceVariant),
+                      ),
+                  ],
+                ),
+              ),
+
+              // ── List ──────────────────────────────────────────────────────
+              Expanded(
+                child: filtered.isEmpty
+                    ? EmptyState(
+                        icon: Icons.account_balance_wallet_outlined,
+                        title: _filter == _ExpenseFilter.mine
+                            ? 'No expenses involve you'
+                            : 'No expenses yet',
+                        subtitle: _filter == _ExpenseFilter.mine
+                            ? 'Switch to "All" to see the full list.'
+                            : 'Tap "Add Expense" to log a shared purchase.',
+                      )
+                    : ListView(
+                        padding:
+                            const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                        children: [
+                          if (unpaid.isNotEmpty) ...[
+                            _sectionHeader(context, 'Unpaid'),
+                            const SizedBox(height: 8),
+                            ...unpaid.map((e) => _ExpenseCard(
+                                  expense: e,
+                                  currentUid: widget.currentUid,
+                                  householdId: widget.householdId,
+                                  service: service,
+                                )),
+                          ],
+                          if (settled.isNotEmpty) ...[
+                            if (unpaid.isNotEmpty) const SizedBox(height: 16),
+                            _sectionHeader(context, 'Paid'),
+                            const SizedBox(height: 8),
+                            ...settled.map((e) => _ExpenseCard(
+                                  expense: e,
+                                  currentUid: widget.currentUid,
+                                  householdId: widget.householdId,
+                                  service: service,
+                                )),
+                          ],
+                        ],
+                      ),
+              ),
             ],
           );
         },
