@@ -60,6 +60,16 @@ class PersonalTaskService {
     );
   }
 
+  /// Owner denies the task → resets it back to incomplete so the assignee
+  /// can try again (or owner can delete it).
+  Future<void> denyTask(String householdId, String taskId) async {
+    await _tasks(householdId).doc(taskId).update({
+      'isComplete': false,
+      'completedAt': null,
+      'approvedBy': null,
+    });
+  }
+
   /// Stream of tasks assigned to a specific user.
   Stream<List<PersonalTask>> getTasksForUser(String householdId, String uid) {
     return _tasks(householdId)

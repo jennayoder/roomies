@@ -379,16 +379,28 @@ class _TaskCard extends StatelessWidget {
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (awaitingApproval)
+                  if (awaitingApproval) ...[
                     FilledButton.tonal(
                       onPressed: () =>
                           service.approveTask(householdId, task.id, currentUid),
                       child: const Text('Approve'),
                     ),
-                  IconButton(
-                    icon: Icon(Icons.delete_outlined, color: colors.error),
-                    onPressed: () => service.deleteTask(householdId, task.id),
-                  ),
+                    const SizedBox(width: 4),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.error,
+                        side: BorderSide(color: colors.error),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      onPressed: () =>
+                          service.denyTask(householdId, task.id),
+                      child: const Text('Deny'),
+                    ),
+                  ] else
+                    IconButton(
+                      icon: Icon(Icons.delete_outlined, color: colors.error),
+                      onPressed: () => service.deleteTask(householdId, task.id),
+                    ),
                 ],
               )
             : null,

@@ -28,7 +28,7 @@ class MemberDetailScreen extends StatelessWidget {
         HouseholdRole.owner => '👑 Owner',
         HouseholdRole.renter => '🏠 Roomie',
         HouseholdRole.princess => '👸 Princess',
-        HouseholdRole.guest => '🎉 Guest',
+        HouseholdRole.guest => '🐀 Attic Rat',
       };
 
   @override
@@ -116,7 +116,7 @@ class MemberDetailScreen extends StatelessWidget {
             ),
           ),
 
-          // Grant XP button — owner only, not for themselves
+          // Adjust XP button — owner only, not for themselves
           if (isViewerOwner &&
               role != HouseholdRole.owner &&
               viewerHouseholdId != null) ...[
@@ -125,8 +125,8 @@ class MemberDetailScreen extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: () =>
                     _showGrantXpSheet(context, user, viewerHouseholdId!),
-                icon: const Icon(Icons.add_circle_outline),
-                label: const Text('Grant XP'),
+                icon: const Icon(Icons.tune),
+                label: const Text('Adjust XP'),
               ),
             ),
           ],
@@ -233,7 +233,7 @@ class MemberDetailScreen extends StatelessWidget {
   }
 }
 
-// ─── Grant XP sheet ───────────────────────────────────────────────────────────
+// ─── Adjust XP sheet ──────────────────────────────────────────────────────────
 
 Future<void> _showGrantXpSheet(
   BuildContext context,
@@ -242,6 +242,7 @@ Future<void> _showGrantXpSheet(
 ) async {
   final amountCtrl = TextEditingController();
   final reasonCtrl = TextEditingController();
+  bool isGrant = true; // true = add XP, false = remove XP
 
   await showModalBottomSheet(
     context: context,
@@ -250,61 +251,109 @@ Future<void> _showGrantXpSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) => Padding(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 24,
-        bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Grant XP to ${member.displayName}',
-            style: Theme.of(ctx).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: amountCtrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'XP amount',
-              suffixText: 'XP',
-              border: OutlineInputBorder(),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Adjust XP — ${member.displayName}',
+              style: Theme.of(ctx).textTheme.titleLarge,
             ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: reasonCtrl,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Reason',
-              hintText: 'e.g. Helped with move-in 🙌',
-              border: OutlineInputBorder(),
+            const SizedBox(height: 4),
+            Text(
+              'Current XP: ${member.totalXp}',
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
             ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () async {
-              final amount = int.tryParse(amountCtrl.text.trim());
-              final reason = reasonCtrl.text.trim();
-              if (amount == null || amount <= 0 || reason.isEmpty) return;
-              await FirestoreService().grantXp(member.uid, amount, reason);
-              if (ctx.mounted) {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
+            const SizedBox(height: 16),
+
+            // Grant / Remove toggle
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: true,
+                  label: Text('Grant XP'),
+                  icon: Icon(Icons.add_circle_outline),
+                ),
+                ButtonSegment(
+                  value: false,
+                  label: Text('Remove XP'),
+                  icon: Icon(Icons.remove_circle_outline),
+                ),
+              ],
+              selected: {isGrant},
+              onSelectionChanged: (v) => setS(() => isGrant = v.first),
+            ),
+            const SizedBox(height: 16),
+
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'XP amount',
+                suffixText: 'XP',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(
+                  isGrant ? Icons.add : Icons.remove,
+                  color: isGrant
+                      ? Theme.of(ctx).colorScheme.primary
+                      : Theme.of(ctx).colorScheme.error,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                labelText: 'Reason',
+                hintText: isGrant
+                    ? 'e.g. Helped with move-in 🙌'
+                    : 'e.g. Chore incorrectly claimed',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              style: isGrant
+                  ? null
+                  : FilledButton.styleFrom(
+                      backgroundColor: Theme.of(ctx).colorScheme.error,
+                      foregroundColor: Theme.of(ctx).colorScheme.onError,
+                    ),
+              onPressed: () async {
+                final raw = int.tryParse(amountCtrl.text.trim());
+                final reason = reasonCtrl.text.trim();
+                if (raw == null || raw <= 0 || reason.isEmpty) return;
+                final amount = isGrant ? raw : -raw;
+                await FirestoreService().grantXp(member.uid, amount, reason);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
                       content: Text(
-                          '🎁 Granted $amount XP to ${member.displayName}!')),
-                );
-              }
-            },
-            icon: const Icon(Icons.card_giftcard),
-            label: const Text('Grant XP'),
-          ),
-        ],
+                        isGrant
+                            ? '🎁 Granted $raw XP to ${member.displayName}!'
+                            : '🗑️ Removed $raw XP from ${member.displayName}.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              icon: Icon(isGrant ? Icons.card_giftcard : Icons.remove_circle),
+              label: Text(isGrant ? 'Grant XP' : 'Remove XP'),
+            ),
+          ],
+        ),
       ),
     ),
   );

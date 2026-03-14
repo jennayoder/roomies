@@ -28,7 +28,7 @@ class _Tab {
 /// Tabs shown depend on the current user's [HouseholdRole]:
 /// - owner/renter: Home, Expenses, Chores+Tasks, Events, Profile
 /// - princess:     Home, Expenses, Chores+Tasks, Events, Profile
-/// - guest:        Home, Events, Profile
+/// - guest:        Home, Expenses, Chores+Tasks, Events, Profile (same as Roomie, no Rent)
 /// - no household: all tabs shown (each screen handles the empty state)
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -152,8 +152,8 @@ class _MainScaffoldState extends State<MainScaffold> {
       ),
     ];
 
-    // Expenses + Chores: everyone except guests.
-    if (role == null || role != HouseholdRole.guest) {
+    // Expenses + Chores: everyone — Attic Rats included (Rent is separately gated).
+    {
       tabs.add(const _Tab(
         NavigationDestination(
           icon: Icon(Icons.account_balance_wallet_outlined),

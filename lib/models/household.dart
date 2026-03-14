@@ -9,14 +9,14 @@ extension HouseholdRoleX on HouseholdRole {
         HouseholdRole.owner => 'Owner',
         HouseholdRole.renter => 'Roomie',
         HouseholdRole.princess => 'Princess',
-        HouseholdRole.guest => 'Guest',
+        HouseholdRole.guest => 'Attic Rat',
       };
 
   String get emoji => switch (this) {
         HouseholdRole.owner => '👑',
         HouseholdRole.renter => '🏠',
         HouseholdRole.princess => '👸',
-        HouseholdRole.guest => '🎉',
+        HouseholdRole.guest => '🐀',
       };
 
   String get label => '${emoji} ${displayName}';
@@ -26,7 +26,8 @@ extension HouseholdRoleX on HouseholdRole {
       this == HouseholdRole.owner || this == HouseholdRole.renter;
 
   /// Can this role see Expenses and Chores tabs?
-  bool get isFullMember => this != HouseholdRole.guest;
+  /// Attic Rats (guests) now have the same access as Roomies — except Rent.
+  bool get isFullMember => true;
 
   /// Can this role manage other members (change roles, remove)?
   bool get canManageMembers => this == HouseholdRole.owner;

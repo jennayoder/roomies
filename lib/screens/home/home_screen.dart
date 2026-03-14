@@ -741,7 +741,7 @@ class _ExpandableMembersCardState extends State<_ExpandableMembersCard> {
         HouseholdRole.owner => '👑 Owner',
         HouseholdRole.renter => '🏠 Roomie',
         HouseholdRole.princess => '👸 Princess',
-        HouseholdRole.guest => '🎉 Guest',
+        HouseholdRole.guest => '🐀 Attic Rat',
       };
 
   @override
