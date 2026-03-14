@@ -21,9 +21,25 @@ class XpService {
   Future<void> awardExpensePaid(String uid, String householdId) =>
       _addXp(uid, _expensePaidXp, source: 'expense', description: 'Settled an expense 💸');
 
-  Future<void> awardChoreCompleted(String uid, String householdId, {int? xp, String? choreTitle}) =>
-      _addXp(uid, xp ?? _choreCompletedXp, source: 'chore',
-          description: choreTitle != null ? 'Completed: $choreTitle 🧹' : 'Completed a chore 🧹');
+  Future<void> awardChoreCompleted(
+    String uid,
+    String householdId, {
+    int? xp,
+    String? choreTitle,
+    String? choreId,
+    String? completionId,
+  }) =>
+      _addXp(
+        uid,
+        xp ?? _choreCompletedXp,
+        source: 'chore',
+        description: choreTitle != null ? 'Completed: $choreTitle 🧹' : 'Completed a chore 🧹',
+        meta: {
+          if (householdId.isNotEmpty) 'householdId': householdId,
+          if (choreId != null) 'choreId': choreId,
+          if (completionId != null) 'completionId': completionId,
+        },
+      );
 
   Future<void> awardGameWin(String uid, String householdId, {String? gameName}) =>
       _addXp(uid, _gameWinXp, source: 'game',
@@ -47,7 +63,69 @@ class XpService {
       _addXp(uid, taskXp.clamp(50, 1000), source: 'task',
           description: taskTitle != null ? 'Completed task: $taskTitle ⭐' : 'Completed a task ⭐');
 
-  Future<void> _addXp(String uid, int amount, {String source = 'other', String description = 'XP earned'}) async {
+  /// Deletes an XP history entry and deducts its amount from the user's total.
+  /// If the entry has a linked chore completion, that is deleted too.
+  Future<void> deleteXpEntry(String uid, String entryId) async {
+    final entryRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('xp_history')
+        .doc(entryId);
+
+    final snap = await entryRef.get();
+    if (!snap.exists) return;
+    final data = snap.data() as Map<String, dynamic>;
+    final amount = (data['amount'] as int?) ?? 0;
+    final source = data['source'] as String?;
+    final choreId = data['choreId'] as String?;
+    final completionId = data['completionId'] as String?;
+    final householdId = data['householdId'] as String?;
+
+    // Deduct XP in a transaction
+    final userRef = _db.collection('users').doc(uid);
+    await _db.runTransaction((tx) async {
+      final userSnap = await tx.get(userRef);
+      if (!userSnap.exists) return;
+      final d = userSnap.data() as Map<String, dynamic>;
+      final oldXp = (d['totalXp'] as int?) ?? 0;
+      final newXp = (oldXp - amount).clamp(0, double.maxFinite).toInt();
+      final newLevel = LevelSystem.fromXp(newXp);
+      tx.update(userRef, {'totalXp': newXp, 'level': newLevel});
+    });
+
+    // Delete the XP history doc
+    await entryRef.delete();
+
+    // Delete linked chore completion (repeatable chores)
+    if (source == 'chore' && choreId != null && completionId != null && householdId != null) {
+      await _db
+          .collection('households')
+          .doc(householdId)
+          .collection('chores')
+          .doc(choreId)
+          .collection('completions')
+          .doc(completionId)
+          .delete();
+    }
+
+    // For non-repeatable chores (no completionId), mark the chore incomplete
+    if (source == 'chore' && choreId != null && completionId == null && householdId != null) {
+      final choreRef = _db
+          .collection('households')
+          .doc(householdId)
+          .collection('chores')
+          .doc(choreId);
+      final choreSnap = await choreRef.get();
+      if (choreSnap.exists) {
+        await choreRef.update({
+          'isCompleted': false,
+          'completedAt': null,
+        });
+      }
+    }
+  }
+
+  Future<void> _addXp(String uid, int amount, {String source = 'other', String description = 'XP earned', Map<String, dynamic>? meta}) async {
     final userRef = _db.collection('users').doc(uid);
 
     await _db.runTransaction((tx) async {
@@ -91,6 +169,7 @@ class XpService {
       'source': source,
       'description': description,
       'timestamp': FieldValue.serverTimestamp(),
+      if (meta != null) ...meta,
     });
   }
 

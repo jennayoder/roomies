@@ -172,7 +172,7 @@ class FirestoreService {
     });
     if (isCompleted && assignedToId != null) {
       await XpService().awardChoreCompleted(assignedToId, householdId,
-          xp: xpReward, choreTitle: choreTitle);
+          xp: xpReward, choreTitle: choreTitle, choreId: choreId);
     }
   }
 
@@ -198,7 +198,7 @@ class FirestoreService {
     int xpReward = 25,
     String? choreTitle,
   }) async {
-    await _chores(householdId)
+    final completionRef = await _chores(householdId)
         .doc(choreId)
         .collection('completions')
         .add(ChoreCompletion(
@@ -209,7 +209,10 @@ class FirestoreService {
         ).toMap());
 
     await XpService().awardChoreCompleted(uid, householdId,
-        xp: xpReward, choreTitle: choreTitle);
+        xp: xpReward,
+        choreTitle: choreTitle,
+        choreId: choreId,
+        completionId: completionRef.id);
   }
 
   /// Streams recent completions for a repeatable chore (last 20).

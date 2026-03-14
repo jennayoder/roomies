@@ -6,6 +6,7 @@ import '../../models/household.dart';
 import '../../models/level_system.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
+import '../../services/xp_service.dart';
 
 final _histFmt = DateFormat('MMM d, h:mm a');
 
@@ -176,14 +177,15 @@ class MemberDetailScreen extends StatelessWidget {
                   itemCount: docs.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, i) {
-                    final data =
-                        docs[i].data() as Map<String, dynamic>;
+                    final doc = docs[i];
+                    final data = doc.data() as Map<String, dynamic>;
                     final amount = (data['amount'] as int?) ?? 0;
                     final description =
                         (data['description'] as String?) ?? 'XP earned';
                     final source =
                         (data['source'] as String?) ?? 'other';
                     final ts = data['timestamp'] as Timestamp?;
+                    final isNegative = amount < 0;
 
                     final sourceIcon = switch (source) {
                       'chore' => Icons.checklist,
@@ -200,13 +202,19 @@ class MemberDetailScreen extends StatelessWidget {
                     return ListTile(
                       dense: true,
                       leading: CircleAvatar(
-                        backgroundColor: colors.secondaryContainer,
+                        backgroundColor: isNegative
+                            ? colors.errorContainer
+                            : colors.secondaryContainer,
                         radius: 18,
-                        child: Icon(sourceIcon,
-                            size: 16, color: colors.onSecondaryContainer),
+                        child: Icon(
+                          isNegative ? Icons.remove_circle_outline : sourceIcon,
+                          size: 16,
+                          color: isNegative
+                              ? colors.onErrorContainer
+                              : colors.onSecondaryContainer,
+                        ),
                       ),
-                      title: Text(description,
-                          style: textTheme.bodyMedium),
+                      title: Text(description, style: textTheme.bodyMedium),
                       subtitle: ts != null
                           ? Text(
                               _histFmt.format(ts.toDate()),
@@ -214,12 +222,36 @@ class MemberDetailScreen extends StatelessWidget {
                                   color: colors.onSurfaceVariant),
                             )
                           : null,
-                      trailing: Text(
-                        '+$amount XP',
-                        style: textTheme.labelLarge?.copyWith(
-                          color: colors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${amount >= 0 ? '+' : ''}$amount XP',
+                            style: textTheme.labelLarge?.copyWith(
+                              color: isNegative
+                                  ? colors.error
+                                  : colors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (isViewerOwner) ...[
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: Icon(Icons.delete_outline,
+                                  size: 18, color: colors.error),
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Delete entry',
+                              onPressed: () => _confirmDeleteXpEntry(
+                                context,
+                                uid: user.uid,
+                                entryId: doc.id,
+                                description: description,
+                                amount: amount,
+                                source: source,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     );
                   },
@@ -230,6 +262,56 @@ class MemberDetailScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ─── Delete XP entry ─────────────────────────────────────────────────────────
+
+Future<void> _confirmDeleteXpEntry(
+  BuildContext context, {
+  required String uid,
+  required String entryId,
+  required String description,
+  required int amount,
+  required String source,
+}) async {
+  final colors = Theme.of(context).colorScheme;
+  final hasChoreLink = source == 'chore';
+
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Delete XP entry?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('"$description" (${amount >= 0 ? '+' : ''}$amount XP)'),
+          const SizedBox(height: 8),
+          Text(
+            hasChoreLink
+                ? 'This will remove the XP and delete the linked chore completion from their history.'
+                : 'This will permanently remove the XP from their total.',
+            style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: colors.error),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm == true) {
+    await XpService().deleteXpEntry(uid, entryId);
   }
 }
 
