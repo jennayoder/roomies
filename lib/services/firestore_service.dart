@@ -184,6 +184,11 @@ class FirestoreService {
     await _chores(householdId).doc(choreId).delete();
   }
 
+  Future<void> updateChore(String householdId, String choreId,
+      Map<String, dynamic> updates) async {
+    await _chores(householdId).doc(choreId).update(updates);
+  }
+
   /// Logs a repeatable chore completion without marking it done.
   Future<void> claimRepeatableChore(
     String householdId,
@@ -327,20 +332,41 @@ class FirestoreService {
   // ─── Daily check-in ────────────────────────────────────────────────────────
 
   /// Records a daily check-in for [uid], awards 5 XP.
+  /// On a 7-day streak, awards a bonus 25 XP.
   /// Returns false if already checked in today.
   Future<bool> dailyCheckIn(String uid) async {
     final today = DateTime.now();
     final todayStr =
         '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final yesterday = today.subtract(const Duration(days: 1));
+    final yesterdayStr =
+        '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
 
     final doc = await _db.collection('users').doc(uid).get();
     if (!doc.exists) return false;
     final data = doc.data() as Map<String, dynamic>;
-    if (data['lastCheckIn'] == todayStr) return false; // already checked in
+    if (data['lastCheckIn'] == todayStr) return false;
 
-    await _db.collection('users').doc(uid).update({'lastCheckIn': todayStr});
+    final lastCheckIn = data['lastCheckIn'] as String?;
+    final currentStreak = (data['checkInStreak'] as int?) ?? 0;
+    final newStreak = lastCheckIn == yesterdayStr ? currentStreak + 1 : 1;
+
+    await _db.collection('users').doc(uid).update({
+      'lastCheckIn': todayStr,
+      'checkInStreak': newStreak,
+    });
     await XpService().awardDailyCheckIn(uid);
+
+    // Bonus on every 7th day streak
+    if (newStreak % 7 == 0) {
+      await XpService().awardStreakBonus(uid);
+    }
     return true;
+  }
+
+  /// Owner grants custom XP to any member.
+  Future<void> grantXp(String uid, int amount, String reason) async {
+    await XpService().grantCustomXp(uid, amount, reason);
   }
 
   // ─── Game wins ─────────────────────────────────────────────────────────────

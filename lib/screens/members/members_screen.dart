@@ -207,6 +207,8 @@ class _MembersScreenState extends State<MembersScreen> {
                               context,
                               member: member,
                               role: role,
+                              isOwner: isOwner,
+                              householdId: householdId,
                             ),
                             onChangeRole: isOwner
                                 ? () => _changeRole(
@@ -243,11 +245,18 @@ class _MembersScreenState extends State<MembersScreen> {
     BuildContext context, {
     required UserModel member,
     required HouseholdRole role,
+    required bool isOwner,
+    required String householdId,
   }) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => MemberDetailScreen(user: member, role: role),
+        builder: (_) => MemberDetailScreen(
+          user: member,
+          role: role,
+          isViewerOwner: isOwner,
+          viewerHouseholdId: householdId,
+        ),
       ),
     );
   }

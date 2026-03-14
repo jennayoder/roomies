@@ -202,6 +202,7 @@ class _CombinedChoresList extends StatelessWidget {
                         chore: c,
                         householdId: householdId,
                         currentUid: currentUid,
+                        isOwner: isOwner,
                         service: firestoreService,
                       )),
                 ],
@@ -220,6 +221,7 @@ class _CombinedChoresList extends StatelessWidget {
                         chore: c,
                         householdId: householdId,
                         currentUid: currentUid,
+                        isOwner: isOwner,
                         service: firestoreService,
                       )),
                 ],
@@ -283,6 +285,7 @@ class _ChoresList extends StatelessWidget {
                     chore: c,
                     householdId: householdId,
                     currentUid: currentUid,
+                    isOwner: false,
                     service: service,
                   )),
             ],
@@ -294,6 +297,7 @@ class _ChoresList extends StatelessWidget {
                     chore: c,
                     householdId: householdId,
                     currentUid: currentUid,
+                    isOwner: false,
                     service: service,
                   )),
             ],
@@ -424,12 +428,14 @@ class _ChoreCard extends StatelessWidget {
   final Chore chore;
   final String householdId;
   final String currentUid;
+  final bool isOwner;
   final FirestoreService service;
 
   const _ChoreCard({
     required this.chore,
     required this.householdId,
     required this.currentUid,
+    required this.isOwner,
     required this.service,
   });
 
@@ -440,6 +446,7 @@ class _ChoreCard extends StatelessWidget {
         chore: chore,
         householdId: householdId,
         currentUid: currentUid,
+        isOwner: isOwner,
         service: service,
       );
     }
@@ -452,7 +459,8 @@ class _ChoreCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       color: isUnassigned ? colors.tertiaryContainer.withOpacity(0.3) : null,
       child: ListTile(
-        onTap: () => showChoreDetail(context, chore: chore, householdId: householdId),
+        onTap: () => showChoreDetail(context, chore: chore, householdId: householdId,
+            currentUid: currentUid, isOwner: isOwner),
         leading: isUnassigned
             ? IconButton(
                 icon: const Icon(Icons.add_circle_outline),
@@ -502,12 +510,14 @@ class _RepeatableChoreCard extends StatelessWidget {
   final Chore chore;
   final String householdId;
   final String currentUid;
+  final bool isOwner;
   final FirestoreService service;
 
   const _RepeatableChoreCard({
     required this.chore,
     required this.householdId,
     required this.currentUid,
+    required this.isOwner,
     required this.service,
   });
 
@@ -529,7 +539,8 @@ class _RepeatableChoreCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ListTile(
-            onTap: () => showChoreDetail(context, chore: chore, householdId: householdId),
+            onTap: () => showChoreDetail(context, chore: chore, householdId: householdId,
+                currentUid: currentUid, isOwner: isOwner),
             leading: Container(
               width: 40,
               height: 40,
@@ -863,6 +874,7 @@ Future<void> _showAddChoreSheet(
                   createdAt: DateTime.now(),
                   xpReward: xpReward,
                   isRepeatable: isRepeatable,
+                  createdById: currentUid,
                 );
                 await service.addChore(householdId, chore);
                 if (ctx.mounted) Navigator.pop(ctx);

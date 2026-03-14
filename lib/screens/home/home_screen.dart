@@ -867,6 +867,10 @@ class _MiniLeaderboardState extends State<_MiniLeaderboard> {
         final sorted = [...snapshot.data!]
           ..sort((a, b) => b.$1.totalXp.compareTo(a.$1.totalXp));
 
+        final isViewerOwner = snapshot.data!.any((m) =>
+            m.$1.uid == widget.currentUid &&
+            m.$2 == HouseholdRole.owner);
+
         return Card(
           child: Column(
             children: [
@@ -880,6 +884,8 @@ class _MiniLeaderboardState extends State<_MiniLeaderboard> {
                       builder: (_) => MemberDetailScreen(
                         user: sorted[i].$1,
                         role: sorted[i].$2 as HouseholdRole,
+                        isViewerOwner: isViewerOwner,
+                        viewerHouseholdId: widget.householdId,
                       ),
                     ),
                   ),

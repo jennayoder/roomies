@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../models/household.dart';
 import '../../models/level_system.dart';
 import '../../models/user_model.dart';
+import '../../services/firestore_service.dart';
 
 final _histFmt = DateFormat('MMM d, h:mm a');
 
@@ -12,11 +13,15 @@ final _histFmt = DateFormat('MMM d, h:mm a');
 class MemberDetailScreen extends StatelessWidget {
   final UserModel user;
   final HouseholdRole role;
+  final bool isViewerOwner;
+  final String? viewerHouseholdId;
 
   const MemberDetailScreen({
     super.key,
     required this.user,
     required this.role,
+    this.isViewerOwner = false,
+    this.viewerHouseholdId,
   });
 
   String _roleLabel(HouseholdRole r) => switch (r) {
@@ -111,6 +116,21 @@ class MemberDetailScreen extends StatelessWidget {
             ),
           ),
 
+          // Grant XP button — owner only, not for themselves
+          if (isViewerOwner &&
+              role != HouseholdRole.owner &&
+              viewerHouseholdId != null) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    _showGrantXpSheet(context, user, viewerHouseholdId!),
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('Grant XP'),
+              ),
+            ),
+          ],
+
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -170,6 +190,10 @@ class MemberDetailScreen extends StatelessWidget {
                       'rent' => Icons.home,
                       'expense' => Icons.account_balance_wallet,
                       'task' => Icons.task_alt,
+                      'game' => Icons.sports_esports,
+                      'checkin' => Icons.wb_sunny,
+                      'grant' => Icons.card_giftcard,
+                      'backfill' => Icons.history,
                       _ => Icons.star,
                     };
 
@@ -207,4 +231,81 @@ class MemberDetailScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─── Grant XP sheet ───────────────────────────────────────────────────────────
+
+Future<void> _showGrantXpSheet(
+  BuildContext context,
+  UserModel member,
+  String householdId,
+) async {
+  final amountCtrl = TextEditingController();
+  final reasonCtrl = TextEditingController();
+
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 24,
+        bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Grant XP to ${member.displayName}',
+            style: Theme.of(ctx).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: amountCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'XP amount',
+              suffixText: 'XP',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: reasonCtrl,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Reason',
+              hintText: 'e.g. Helped with move-in 🙌',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () async {
+              final amount = int.tryParse(amountCtrl.text.trim());
+              final reason = reasonCtrl.text.trim();
+              if (amount == null || amount <= 0 || reason.isEmpty) return;
+              await FirestoreService().grantXp(member.uid, amount, reason);
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                      content: Text(
+                          '🎁 Granted $amount XP to ${member.displayName}!')),
+                );
+              }
+            },
+            icon: const Icon(Icons.card_giftcard),
+            label: const Text('Grant XP'),
+          ),
+        ],
+      ),
+    ),
+  );
 }

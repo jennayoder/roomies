@@ -92,6 +92,10 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
             final sorted = [...members]
               ..sort((a, b) => b.$1.totalXp.compareTo(a.$1.totalXp));
 
+            final isViewerOwner = members.any((m) =>
+                m.$1.uid == widget.currentUid &&
+                m.$2 == HouseholdRole.owner);
+
             return ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -103,6 +107,8 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
                   role: sorted[index].$2,
                   rank: index + 1,
                   isMe: user.uid == widget.currentUid,
+                  isViewerOwner: isViewerOwner,
+                  householdId: widget.householdId,
                 );
               },
             );
@@ -118,12 +124,16 @@ class _LeaderboardCard extends StatelessWidget {
   final HouseholdRole role;
   final int rank;
   final bool isMe;
+  final bool isViewerOwner;
+  final String householdId;
 
   const _LeaderboardCard({
     required this.user,
     required this.role,
     required this.rank,
     required this.isMe,
+    required this.isViewerOwner,
+    required this.householdId,
   });
 
   String get _medal => switch (rank) {
@@ -146,7 +156,12 @@ class _LeaderboardCard extends StatelessWidget {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => MemberDetailScreen(user: user, role: role),
+            builder: (_) => MemberDetailScreen(
+              user: user,
+              role: role,
+              isViewerOwner: isViewerOwner,
+              viewerHouseholdId: householdId,
+            ),
           ),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

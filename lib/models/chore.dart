@@ -40,6 +40,9 @@ class Chore {
   /// Completions are logged to a subcollection; isCompleted stays false.
   final bool isRepeatable;
 
+  /// UID of the member who created this chore.
+  final String? createdById;
+
   const Chore({
     required this.id,
     required this.title,
@@ -52,6 +55,7 @@ class Chore {
     required this.createdAt,
     this.xpReward = 25,
     this.isRepeatable = false,
+    this.createdById,
   });
 
   // ─── Firestore serialization ───────────────────────────────────────────────
@@ -77,6 +81,7 @@ class Chore {
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       xpReward: (data['xpReward'] as int?) ?? 25,
       isRepeatable: (data['isRepeatable'] as bool?) ?? false,
+      createdById: data['createdById'] as String?,
     );
   }
 
@@ -92,6 +97,7 @@ class Chore {
         'createdAt': Timestamp.fromDate(createdAt),
         'xpReward': xpReward,
         'isRepeatable': isRepeatable,
+        'createdById': createdById,
       };
 
   Chore copyWith({
@@ -111,5 +117,6 @@ class Chore {
         createdAt: createdAt,
         xpReward: xpReward,
         isRepeatable: isRepeatable,
+        createdById: createdById,
       );
 }

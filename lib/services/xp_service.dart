@@ -32,6 +32,12 @@ class XpService {
   Future<void> awardDailyCheckIn(String uid) =>
       _addXp(uid, _dailyCheckInXp, source: 'checkin', description: 'Daily check-in ☀️');
 
+  Future<void> awardStreakBonus(String uid) =>
+      _addXp(uid, 25, source: 'checkin', description: '7-day check-in streak bonus 🔥');
+
+  Future<void> grantCustomXp(String uid, int amount, String reason) =>
+      _addXp(uid, amount, source: 'grant', description: reason);
+
   Future<void> awardPersonalTaskCompleted(
     String uid,
     String householdId,

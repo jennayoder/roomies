@@ -47,6 +47,9 @@ class UserModel {
   /// Date string (yyyy-MM-dd) of last daily check-in. Null if never checked in.
   final String? lastCheckIn;
 
+  /// Number of consecutive daily check-ins.
+  final int checkInStreak;
+
   /// Earned badge IDs, e.g. ['game_champion'].
   final List<String> badges;
 
@@ -67,6 +70,7 @@ class UserModel {
     this.pendingLevelUp,
     this.gameWins = 0,
     this.lastCheckIn,
+    this.checkInStreak = 0,
     this.badges = const [],
   });
 
@@ -91,6 +95,7 @@ class UserModel {
       pendingLevelUp: data['pendingLevelUp'] as int?,
       gameWins: (data['gameWins'] as int?) ?? 0,
       lastCheckIn: data['lastCheckIn'] as String?,
+      checkInStreak: (data['checkInStreak'] as int?) ?? 0,
       badges: List<String>.from(data['badges'] ?? const []),
     );
   }
@@ -111,6 +116,7 @@ class UserModel {
         'pendingLevelUp': pendingLevelUp,
         'gameWins': gameWins,
         'lastCheckIn': lastCheckIn,
+        'checkInStreak': checkInStreak,
         'badges': badges,
       };
 
@@ -136,6 +142,7 @@ class UserModel {
     int? pendingLevelUp,
     int? gameWins,
     String? lastCheckIn,
+    int? checkInStreak,
     List<String>? badges,
   }) =>
       UserModel(
@@ -155,6 +162,7 @@ class UserModel {
         pendingLevelUp: pendingLevelUp ?? this.pendingLevelUp,
         gameWins: gameWins ?? this.gameWins,
         lastCheckIn: lastCheckIn ?? this.lastCheckIn,
+        checkInStreak: checkInStreak ?? this.checkInStreak,
         badges: badges ?? this.badges,
       );
 }
