@@ -16,6 +16,8 @@ class MemberDetailScreen extends StatelessWidget {
   final HouseholdRole role;
   final bool isViewerOwner;
   final String? viewerHouseholdId;
+  final String? currentUid;
+  final String? viewerName;
 
   const MemberDetailScreen({
     super.key,
@@ -23,6 +25,8 @@ class MemberDetailScreen extends StatelessWidget {
     required this.role,
     this.isViewerOwner = false,
     this.viewerHouseholdId,
+    this.currentUid,
+    this.viewerName,
   });
 
   String _roleLabel(HouseholdRole r) => switch (r) {
@@ -117,6 +121,18 @@ class MemberDetailScreen extends StatelessWidget {
             ),
           ),
 
+          // Give Kudos — any user, not to themselves
+          if (currentUid != null && currentUid != user.uid) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: OutlinedButton.icon(
+                onPressed: () => _showKudosConfirm(context, user, viewerName),
+                icon: const Icon(Icons.volunteer_activism),
+                label: const Text('Give Kudos (+5 XP)'),
+              ),
+            ),
+          ],
+
           // Adjust XP button — owner only, not for themselves
           if (isViewerOwner &&
               role != HouseholdRole.owner &&
@@ -195,6 +211,7 @@ class MemberDetailScreen extends StatelessWidget {
                       'game' => Icons.sports_esports,
                       'checkin' => Icons.wb_sunny,
                       'grant' => Icons.card_giftcard,
+                      'kudos' => Icons.volunteer_activism,
                       'backfill' => Icons.history,
                       _ => Icons.star,
                     };
@@ -262,6 +279,46 @@ class MemberDetailScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ─── Give Kudos ───────────────────────────────────────────────────────────────
+
+Future<void> _showKudosConfirm(
+  BuildContext context,
+  UserModel member,
+  String? fromName,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Give Kudos 👏'),
+      content: Text(
+        'Send kudos to ${member.displayName}? They\'ll earn +5 XP.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: () => Navigator.pop(ctx, true),
+          icon: const Icon(Icons.volunteer_activism),
+          label: const Text('Send Kudos'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed == true) {
+    await XpService().awardKudos(member.uid, fromName ?? 'a roommate');
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('👏 Kudos sent to ${member.displayName}! +5 XP'),
+        ),
+      );
+    }
   }
 }
 

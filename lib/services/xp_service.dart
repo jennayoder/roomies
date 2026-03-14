@@ -54,6 +54,10 @@ class XpService {
   Future<void> grantCustomXp(String uid, int amount, String reason) =>
       _addXp(uid, amount, source: 'grant', description: reason);
 
+  /// Awards 5 XP for receiving kudos from another member.
+  Future<void> awardKudos(String uid, String fromName) =>
+      _addXp(uid, 5, source: 'kudos', description: '👏 Kudos from $fromName');
+
   Future<void> awardPersonalTaskCompleted(
     String uid,
     String householdId,

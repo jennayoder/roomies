@@ -95,6 +95,10 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
             final isViewerOwner = members.any((m) =>
                 m.$1.uid == widget.currentUid &&
                 m.$2 == HouseholdRole.owner);
+            final viewerName = members
+                .where((m) => m.$1.uid == widget.currentUid)
+                .map((m) => m.$1.displayName)
+                .firstOrNull;
 
             return ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -109,6 +113,8 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
                   isMe: user.uid == widget.currentUid,
                   isViewerOwner: isViewerOwner,
                   householdId: widget.householdId,
+                  currentUid: widget.currentUid,
+                  viewerName: viewerName,
                 );
               },
             );
@@ -126,6 +132,8 @@ class _LeaderboardCard extends StatelessWidget {
   final bool isMe;
   final bool isViewerOwner;
   final String householdId;
+  final String currentUid;
+  final String? viewerName;
 
   const _LeaderboardCard({
     required this.user,
@@ -134,6 +142,8 @@ class _LeaderboardCard extends StatelessWidget {
     required this.isMe,
     required this.isViewerOwner,
     required this.householdId,
+    required this.currentUid,
+    this.viewerName,
   });
 
   String get _medal => switch (rank) {
@@ -161,6 +171,8 @@ class _LeaderboardCard extends StatelessWidget {
               role: role,
               isViewerOwner: isViewerOwner,
               viewerHouseholdId: householdId,
+              currentUid: currentUid,
+              viewerName: viewerName,
             ),
           ),
         ),

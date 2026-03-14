@@ -209,6 +209,11 @@ class _MembersScreenState extends State<MembersScreen> {
                               role: role,
                               isOwner: isOwner,
                               householdId: householdId,
+                              currentUid: currentUid,
+                              viewerName: members
+                                  .where((m) => m.uid == currentUid)
+                                  .map((m) => m.displayName)
+                                  .firstOrNull,
                             ),
                             onChangeRole: isOwner
                                 ? () => _changeRole(
@@ -247,6 +252,8 @@ class _MembersScreenState extends State<MembersScreen> {
     required HouseholdRole role,
     required bool isOwner,
     required String householdId,
+    required String currentUid,
+    String? viewerName,
   }) {
     Navigator.push(
       context,
@@ -256,6 +263,8 @@ class _MembersScreenState extends State<MembersScreen> {
           role: role,
           isViewerOwner: isOwner,
           viewerHouseholdId: householdId,
+          currentUid: currentUid,
+          viewerName: viewerName,
         ),
       ),
     );

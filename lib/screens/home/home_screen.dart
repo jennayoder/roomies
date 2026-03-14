@@ -886,6 +886,11 @@ class _MiniLeaderboardState extends State<_MiniLeaderboard> {
                         role: sorted[i].$2 as HouseholdRole,
                         isViewerOwner: isViewerOwner,
                         viewerHouseholdId: widget.householdId,
+                        currentUid: widget.currentUid,
+                        viewerName: snapshot.data!
+                            .where((m) => m.$1.uid == widget.currentUid)
+                            .map((m) => m.$1.displayName)
+                            .firstOrNull,
                       ),
                     ),
                   ),
