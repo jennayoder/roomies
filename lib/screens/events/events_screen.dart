@@ -246,10 +246,11 @@ class _EventCard extends StatelessWidget {
                   tooltip: 'Add to Google Calendar',
                   onPressed: () async {
                     final uri = _googleCalendarUri(event);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri,
-                          mode: LaunchMode.externalApplication);
-                    }
+                    await launchUrl(
+                      uri,
+                      mode: LaunchMode.platformDefault,
+                      webOnlyWindowName: '_blank',
+                    );
                   },
                 ),
                 if (event.isUpcoming) ...[
