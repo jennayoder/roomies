@@ -151,7 +151,11 @@ class _ChoreDetailSheet extends StatelessWidget {
           _DetailRow(
             icon: Icons.repeat,
             label: 'Frequency',
-            value: chore.frequency.label,
+            value: chore.isRepeatable
+                ? '🔄 Always Available'
+                : chore.isWeeklyClaimable
+                    ? '📅 Weekly Claimable'
+                    : chore.frequency.label,
           ),
 
           // Due date
@@ -266,6 +270,11 @@ Future<void> _showEditChoreSheet(
   DateTime? dueDate = chore.dueDate;
   int xpReward = chore.xpReward;
   String assignedTo = chore.assignedToId ?? '';
+  String choreType = chore.isWeeklyClaimable
+      ? 'weekly'
+      : chore.isRepeatable
+          ? 'repeat'
+          : 'once';
 
   await showModalBottomSheet(
     context: context,
@@ -353,11 +362,25 @@ Future<void> _showEditChoreSheet(
               label: '$xpReward XP',
               onChanged: (v) => setS(() => xpReward = v.round()),
             ),
+            const SizedBox(height: 8),
+            Text('Chore type', style: Theme.of(ctx).textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'once', label: Text('One-time')),
+                ButtonSegment(value: 'repeat', label: Text('Always available')),
+                ButtonSegment(value: 'weekly', label: Text('Weekly')),
+              ],
+              selected: {choreType},
+              onSelectionChanged: (sel) => setS(() => choreType = sel.first),
+            ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () async {
                 final title = titleCtrl.text.trim();
                 if (title.isEmpty) return;
+                final isRepeatable = choreType == 'repeat';
+                final isWeeklyClaimable = choreType == 'weekly';
                 await service.updateChore(householdId, chore.id, {
                   'title': title,
                   'description': descCtrl.text.trim().isEmpty
@@ -370,6 +393,8 @@ Future<void> _showEditChoreSheet(
                       ? dueDate!.millisecondsSinceEpoch
                       : null,
                   'xpReward': xpReward,
+                  'isRepeatable': isRepeatable,
+                  'isWeeklyClaimable': isWeeklyClaimable,
                 });
                 if (ctx.mounted) Navigator.pop(ctx);
               },

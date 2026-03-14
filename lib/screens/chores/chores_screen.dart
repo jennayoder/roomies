@@ -138,12 +138,23 @@ class _CombinedChoresList extends StatelessWidget {
                     : allChores.where((c) =>
                         c.assignedToId == null ||
                         c.assignedToId == currentUid ||
-                        c.isRepeatable))
-                .where((c) => !c.isCompleted || c.isRepeatable)
+                        c.isRepeatable ||
+                        c.isWeeklyClaimable))
+                .where((c) => !c.isCompleted || c.isRepeatable || c.isWeeklyClaimable)
+                .toList();
+
+            final repeatableChores = pendingChores
+                .where((c) => c.isRepeatable && !c.isWeeklyClaimable)
+                .toList();
+            final weeklyChores = pendingChores
+                .where((c) => c.isWeeklyClaimable)
+                .toList();
+            final regularChores = pendingChores
+                .where((c) => !c.isRepeatable && !c.isWeeklyClaimable)
                 .toList();
 
             final doneChores = allChores
-                .where((c) => c.isCompleted && !c.isRepeatable)
+                .where((c) => c.isCompleted && !c.isRepeatable && !c.isWeeklyClaimable)
                 .toList();
 
             if (pendingChores.isEmpty && doneChores.isEmpty && tasks.isEmpty) {
@@ -171,6 +182,7 @@ class _CombinedChoresList extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               children: [
+                // 1. Awaiting Approval (owner only)
                 if (needsApproval.isNotEmpty && isOwner) ...[
                   _sectionHeader(context, '⏳ Awaiting Approval'),
                   const SizedBox(height: 8),
@@ -183,6 +195,33 @@ class _CombinedChoresList extends StatelessWidget {
                       )),
                   const SizedBox(height: 16),
                 ],
+                // 2. Always Available (repeatable, not weekly)
+                if (repeatableChores.isNotEmpty) ...[
+                  _sectionHeader(context, '🔄 Always Available'),
+                  const SizedBox(height: 8),
+                  ...repeatableChores.map((c) => _ChoreCard(
+                        chore: c,
+                        householdId: householdId,
+                        currentUid: currentUid,
+                        isOwner: isOwner,
+                        service: firestoreService,
+                      )),
+                  const SizedBox(height: 16),
+                ],
+                // 3. Weekly claimable
+                if (weeklyChores.isNotEmpty) ...[
+                  _sectionHeader(context, '📅 Weekly'),
+                  const SizedBox(height: 8),
+                  ...weeklyChores.map((c) => _ChoreCard(
+                        chore: c,
+                        householdId: householdId,
+                        currentUid: currentUid,
+                        isOwner: isOwner,
+                        service: firestoreService,
+                      )),
+                  const SizedBox(height: 16),
+                ],
+                // 4. XP Chores (personal tasks pending)
                 if (pendingTasks.isNotEmpty) ...[
                   _sectionHeader(context, '⭐ XP Chores'),
                   const SizedBox(height: 8),
@@ -195,10 +234,11 @@ class _CombinedChoresList extends StatelessWidget {
                       )),
                   const SizedBox(height: 16),
                 ],
-                if (pendingChores.isNotEmpty) ...[
+                // 5. Regular one-time chores
+                if (regularChores.isNotEmpty) ...[
                   _sectionHeader(context, 'To Do'),
                   const SizedBox(height: 8),
-                  ...pendingChores.map((c) => _ChoreCard(
+                  ...regularChores.map((c) => _ChoreCard(
                         chore: c,
                         householdId: householdId,
                         currentUid: currentUid,
@@ -206,6 +246,7 @@ class _CombinedChoresList extends StatelessWidget {
                         service: firestoreService,
                       )),
                 ],
+                // 6. Done
                 if (doneChores.isNotEmpty || doneTasks.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _sectionHeader(context, 'Done'),
@@ -441,8 +482,18 @@ class _ChoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (chore.isRepeatable) {
+    if (chore.isRepeatable && !chore.isWeeklyClaimable) {
       return _RepeatableChoreCard(
+        chore: chore,
+        householdId: householdId,
+        currentUid: currentUid,
+        isOwner: isOwner,
+        service: service,
+      );
+    }
+
+    if (chore.isWeeklyClaimable) {
+      return _WeeklyChoreCard(
         chore: chore,
         householdId: householdId,
         currentUid: currentUid,
@@ -622,6 +673,144 @@ class _RepeatableChoreCard extends StatelessWidget {
   }
 }
 
+// ─── Weekly chore card ────────────────────────────────────────────────────────
+
+class _WeeklyChoreCard extends StatelessWidget {
+  final Chore chore;
+  final String householdId;
+  final String currentUid;
+  final bool isOwner;
+  final FirestoreService service;
+
+  const _WeeklyChoreCard({
+    required this.chore,
+    required this.householdId,
+    required this.currentUid,
+    required this.isOwner,
+    required this.service,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    final DateTime now = DateTime.now();
+    final DateTime weekStart = now.subtract(Duration(days: now.weekday - 1));
+    final DateTime weekStartDay =
+        DateTime(weekStart.year, weekStart.month, weekStart.day);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          StreamBuilder<List<ChoreCompletion>>(
+            stream: service.choreCompletionsStream(householdId, chore.id),
+            builder: (context, snap) {
+              final thisWeek = (snap.data ?? [])
+                  .where((c) =>
+                      c.claimedAt.isAfter(weekStartDay) ||
+                      c.claimedAt.isAtSameMomentAs(weekStartDay))
+                  .toList();
+              final alreadyClaimed =
+                  thisWeek.any((c) => c.uid == currentUid);
+
+              return ListTile(
+                onTap: () => showChoreDetail(context,
+                    chore: chore,
+                    householdId: householdId,
+                    currentUid: currentUid,
+                    isOwner: isOwner),
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: colors.tertiaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.date_range,
+                      color: colors.onTertiaryContainer, size: 20),
+                ),
+                title: Text(chore.title,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                  '⭐ ${chore.xpReward} XP · Claimable once/week',
+                  style: textTheme.bodySmall,
+                ),
+                trailing: alreadyClaimed
+                    ? FilledButton.tonal(
+                        onPressed: null,
+                        child: const Text('Claimed ✓'),
+                      )
+                    : FilledButton(
+                        onPressed: () async {
+                          final user = await FirestoreService()
+                              .getHouseholdMembers(householdId)
+                              .then((members) => members
+                                  .where((m) => m.$1.uid == currentUid)
+                                  .firstOrNull);
+                          final name = user?.$1.displayName ?? 'Someone';
+                          await service.claimRepeatableChore(
+                            householdId,
+                            chore.id,
+                            currentUid,
+                            name,
+                            xpReward: chore.xpReward,
+                            choreTitle: chore.title,
+                          );
+                        },
+                        child: const Text('Claim +XP'),
+                      ),
+              );
+            },
+          ),
+
+          // This week's claimants
+          StreamBuilder<List<ChoreCompletion>>(
+            stream: service.choreCompletionsStream(householdId, chore.id),
+            builder: (context, snap) {
+              final thisWeek = (snap.data ?? [])
+                  .where((c) =>
+                      c.claimedAt.isAfter(weekStartDay) ||
+                      c.claimedAt.isAtSameMomentAs(weekStartDay))
+                  .toList();
+
+              if (thisWeek.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Text('No claims this week — be the first!',
+                      style: textTheme.bodySmall
+                          ?.copyWith(color: colors.onSurfaceVariant)),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: thisWeek.take(10).map((c) {
+                    return Chip(
+                      avatar: const Icon(Icons.check_circle, size: 14),
+                      label: Text(
+                        c.displayName,
+                        style: textTheme.labelSmall,
+                      ),
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      backgroundColor: colors.secondaryContainer,
+                    );
+                  }).toList(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ─── Task card ────────────────────────────────────────────────────────────────
 
 class _TaskCard extends StatelessWidget {
@@ -751,7 +940,7 @@ Future<void> _showAddChoreSheet(
   ChoreFrequency selectedFrequency = ChoreFrequency.once;
   DateTime? dueDate;
   int xpReward = 25;
-  bool isRepeatable = false;
+  String choreType = 'once'; // "once" | "repeat" | "weekly"
   // Non-owners default to unassigned (they can't self-assign)
   String assignedTo = isOwner ? currentUid : '';
 
@@ -858,34 +1047,37 @@ Future<void> _showAddChoreSheet(
               label: '$xpReward XP',
               onChanged: (v) => setS(() => xpReward = v.round()),
             ),
+            const SizedBox(height: 16),
+            Text('Chore type', style: Theme.of(ctx).textTheme.bodyMedium),
             const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: isRepeatable,
-              title: const Text('🔁 Always available'),
-              subtitle: Text(
-                isRepeatable
-                    ? 'Anyone can claim this chore repeatedly — it never disappears'
-                    : 'One-time chore — disappears when completed',
-                style: Theme.of(ctx).textTheme.bodySmall,
-              ),
-              onChanged: (v) => setS(() => isRepeatable = v),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'once', label: Text('One-time')),
+                ButtonSegment(value: 'repeat', label: Text('Always available')),
+                ButtonSegment(value: 'weekly', label: Text('Weekly')),
+              ],
+              selected: {choreType},
+              onSelectionChanged: (sel) => setS(() => choreType = sel.first),
             ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () async {
                 final title = titleCtrl.text.trim();
                 if (title.isEmpty) return;
+                final isRepeatable = choreType == 'repeat';
+                final isWeeklyClaimable = choreType == 'weekly';
+                final isOpen = isRepeatable || isWeeklyClaimable;
                 final chore = Chore(
                   id: const Uuid().v4(),
                   title: title,
                   description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-                  assignedToId: isRepeatable ? null : (assignedTo.isEmpty ? null : assignedTo),
+                  assignedToId: isOpen ? null : (assignedTo.isEmpty ? null : assignedTo),
                   frequency: selectedFrequency,
-                  dueDate: isRepeatable ? null : dueDate,
+                  dueDate: isOpen ? null : dueDate,
                   createdAt: DateTime.now(),
                   xpReward: xpReward,
                   isRepeatable: isRepeatable,
+                  isWeeklyClaimable: isWeeklyClaimable,
                   createdById: currentUid,
                 );
                 await service.addChore(householdId, chore);

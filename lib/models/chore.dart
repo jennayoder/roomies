@@ -40,6 +40,9 @@ class Chore {
   /// Completions are logged to a subcollection; isCompleted stays false.
   final bool isRepeatable;
 
+  /// If true, this chore can be claimed once per ISO week (Mon–Sun).
+  final bool isWeeklyClaimable;
+
   /// UID of the member who created this chore.
   final String? createdById;
 
@@ -55,6 +58,7 @@ class Chore {
     required this.createdAt,
     this.xpReward = 25,
     this.isRepeatable = false,
+    this.isWeeklyClaimable = false,
     this.createdById,
   });
 
@@ -81,6 +85,7 @@ class Chore {
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       xpReward: (data['xpReward'] as int?) ?? 25,
       isRepeatable: (data['isRepeatable'] as bool?) ?? false,
+      isWeeklyClaimable: (data['isWeeklyClaimable'] as bool?) ?? false,
       createdById: data['createdById'] as String?,
     );
   }
@@ -97,6 +102,7 @@ class Chore {
         'createdAt': Timestamp.fromDate(createdAt),
         'xpReward': xpReward,
         'isRepeatable': isRepeatable,
+        'isWeeklyClaimable': isWeeklyClaimable,
         'createdById': createdById,
       };
 
@@ -104,6 +110,8 @@ class Chore {
     bool? isCompleted,
     DateTime? completedAt,
     String? assignedToId,
+    bool? isRepeatable,
+    bool? isWeeklyClaimable,
   }) =>
       Chore(
         id: id,
@@ -116,7 +124,8 @@ class Chore {
         completedAt: completedAt ?? this.completedAt,
         createdAt: createdAt,
         xpReward: xpReward,
-        isRepeatable: isRepeatable,
+        isRepeatable: isRepeatable ?? this.isRepeatable,
+        isWeeklyClaimable: isWeeklyClaimable ?? this.isWeeklyClaimable,
         createdById: createdById,
       );
 }
