@@ -1,76 +1,97 @@
-import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
+import 'dart:async';
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
+
 import 'package:flutter/foundation.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
+import 'package:googleapis_auth/googleapis_auth.dart' as gapis;
+import 'package:http/http.dart' as http;
 
 import '../models/event.dart';
 
-/// Handles Google Calendar OAuth and event CRUD.
-///
-/// Uses GoogleSignIn v7 singleton API:
-///   - initialize() once at app start (or lazily here)
-///   - attemptLightweightAuthentication() for silent re-auth
-///   - authenticate() for interactive sign-in
-///   - authorizeScopes() to get a calendar-scoped auth client
+// ─── GIS JS interop ──────────────────────────────────────────────────────────
+
+@JS('google.accounts.oauth2.initTokenClient')
+external JSObject _initTokenClient(JSObject config);
+
+// ─── Service ─────────────────────────────────────────────────────────────────
+
 class GoogleCalendarService {
   static const _clientId =
       '1059067392660-cigc9c67r7h2g4l984ojspsk9iq79rqi.apps.googleusercontent.com';
   static const _calendarScope =
       'https://www.googleapis.com/auth/calendar.events';
 
-  /// Returns an authenticated CalendarApi, or null if the user declines.
-  /// GoogleSignIn.instance.initialize() must be called before this (done in main.dart).
+  /// Uses the GIS token client to open an OAuth popup and get an access token.
+  Future<String?> _getAccessToken() async {
+    final completer = Completer<String?>();
+
+    void callback(JSObject response) {
+      final tokenJs = response['access_token'];
+      if (tokenJs != null) {
+        completer.complete((tokenJs as JSString).toDart);
+      } else {
+        final errJs = response['error'];
+        final err = errJs != null ? (errJs as JSString).toDart : 'unknown';
+        debugPrint('GIS token error: $err');
+        completer.complete(null);
+      }
+    }
+
+    final config = JSObject();
+    config['client_id'] = _clientId.toJS;
+    config['scope'] = _calendarScope.toJS;
+    config['callback'] = callback.toJS;
+
+    final tokenClient = _initTokenClient(config);
+    tokenClient.callMethod('requestAccessToken'.toJS);
+
+    return completer.future;
+  }
+
   Future<gcal.CalendarApi?> _getApi() async {
-    try {
+    final token = await _getAccessToken();
+    if (token == null) return null;
 
-      // Try silent first
-      GoogleSignInAccount? account =
-          await GoogleSignIn.instance.attemptLightweightAuthentication();
-      // Interactive if needed
-      account ??= await GoogleSignIn.instance.authenticate();
+    final credentials = gapis.AccessCredentials(
+      gapis.AccessToken(
+        'Bearer',
+        token,
+        DateTime.now().toUtc().add(const Duration(hours: 1)),
+      ),
+      null,
+      [_calendarScope],
+    );
 
-      // Request calendar scope
-      final auth = await account.authorizationClient
-          .authorizeScopes([_calendarScope]);
-
-      final httpClient = auth.authClient(scopes: [_calendarScope]);
-      return gcal.CalendarApi(httpClient);
-    } catch (e) {
-      debugPrint('GoogleCalendarService._getApi error: $e');
-      return null;
-    }
+    final authClient = gapis.authenticatedClient(http.Client(), credentials);
+    return gcal.CalendarApi(authClient);
   }
 
-  /// Creates an event in the signed-in user's primary Google Calendar.
-  /// Returns the Google Calendar event ID on success, null on failure.
+  /// Creates an event in the user's primary Google Calendar.
+  /// Returns the Google Calendar event ID, or null on failure.
   Future<String?> addEvent(Event event) async {
-    try {
-      final api = await _getApi();
-      if (api == null) return null;
+    final api = await _getApi();
+    if (api == null) return null;
 
-      final gcalEvent = gcal.Event(
-        summary: event.title,
-        description: event.description,
-        location: event.location,
-        start: gcal.EventDateTime(
-          dateTime: event.dateTime.toUtc(),
-          timeZone: 'America/Los_Angeles',
-        ),
-        end: gcal.EventDateTime(
-          dateTime: event.dateTime.toUtc().add(const Duration(hours: 1)),
-          timeZone: 'America/Los_Angeles',
-        ),
-      );
+    final gcalEvent = gcal.Event(
+      summary: event.title,
+      description: event.description,
+      location: event.location,
+      start: gcal.EventDateTime(
+        dateTime: event.dateTime.toUtc(),
+        timeZone: 'America/Los_Angeles',
+      ),
+      end: gcal.EventDateTime(
+        dateTime: event.dateTime.toUtc().add(const Duration(hours: 1)),
+        timeZone: 'America/Los_Angeles',
+      ),
+    );
 
-      final created = await api.events.insert(gcalEvent, 'primary');
-      return created.id;
-    } catch (e) {
-      debugPrint('GoogleCalendarService.addEvent error: $e');
-      return null;
-    }
+    final created = await api.events.insert(gcalEvent, 'primary');
+    return created.id;
   }
 
-  /// Deletes an event from the signed-in user's primary Google Calendar.
+  /// Deletes an event from the user's primary Google Calendar.
   Future<void> removeEvent(String calendarEventId) async {
     try {
       final api = await _getApi();

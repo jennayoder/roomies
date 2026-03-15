@@ -147,7 +147,6 @@ file:///home/moneymaker/.pub-cache/hosted/pub.dev/crypto-3.0.7/lib/src/sha256.da
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/crypto-3.0.7/lib/src/sha512.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/crypto-3.0.7/lib/src/sha512_slowsinks.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/crypto-3.0.7/lib/src/utils.dart
-file:///home/moneymaker/.pub-cache/hosted/pub.dev/extension_google_sign_in_as_googleapis_auth-3.0.0/lib/extension_google_sign_in_as_googleapis_auth.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/firebase_auth-6.2.0/lib/firebase_auth.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/firebase_auth-6.2.0/lib/src/confirmation_result.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/firebase_auth-6.2.0/lib/src/firebase_auth.dart
@@ -276,14 +275,6 @@ file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_fonts-6.3.3/lib/src/goo
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_fonts-6.3.3/lib/src/google_fonts_parts/part_y.g.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_fonts-6.3.3/lib/src/google_fonts_parts/part_z.g.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_fonts-6.3.3/lib/src/google_fonts_variant.dart
-file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_sign_in-7.2.0/lib/google_sign_in.dart
-file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_sign_in-7.2.0/lib/src/event_types.dart
-file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_sign_in-7.2.0/lib/src/fife.dart
-file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_sign_in-7.2.0/lib/src/identity_types.dart
-file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_sign_in-7.2.0/lib/src/token_types.dart
-file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_sign_in-7.2.0/lib/widgets.dart
-file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_sign_in_platform_interface-3.1.0/lib/google_sign_in_platform_interface.dart
-file:///home/moneymaker/.pub-cache/hosted/pub.dev/google_sign_in_platform_interface-3.1.0/lib/src/types.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/googleapis-16.0.0/lib/calendar/v3.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/googleapis-16.0.0/lib/src/user_agent.dart
 file:///home/moneymaker/.pub-cache/hosted/pub.dev/googleapis_auth-2.0.0/lib/googleapis_auth.dart
