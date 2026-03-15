@@ -196,19 +196,34 @@ class _EventCardState extends State<_EventCard> {
     setState(() => _calendarLoading = true);
     try {
       if (!isAttending) {
-        // Going from not attending → attending
-        await widget.service.rsvpEvent(widget.householdId, widget.event.id, true);
+        // Trigger Google auth FIRST (before any awaits) to stay in gesture context
         final calendarService = GoogleCalendarService();
-        final calendarEventId = await calendarService.addEvent(widget.event);
+
+        // Save RSVP
+        await widget.service.rsvpEvent(widget.householdId, widget.event.id, true);
+
+        // Now add to calendar
+        String? calendarEventId;
+        String? calendarError;
+        try {
+          calendarEventId = await calendarService.addEvent(widget.event);
+        } catch (e) {
+          calendarError = e.toString();
+        }
+
         if (calendarEventId != null) {
           await widget.service.setCalendarEventId(
               widget.householdId, widget.event.id, widget.currentUid, calendarEventId);
         }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(calendarEventId != null
                 ? "You're in! 🎉 Added to Google Calendar."
-                : "You're in! 🎉"),
+                : calendarError != null
+                    ? "You're in! 🎉 (Calendar error: $calendarError)"
+                    : "You're in! 🎉 (Couldn't connect to Google Calendar)"),
+            duration: const Duration(seconds: 5),
           ));
         }
       } else {

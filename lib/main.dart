@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
 
 import 'app.dart';
@@ -13,6 +14,11 @@ void main() async {
   // Initialize Firebase before the app starts.
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Initialize Google Sign-In for Google Calendar OAuth.
+  await GoogleSignIn.instance.initialize(
+    clientId: '1059067392660-cigc9c67r7h2g4l984ojspsk9iq79rqi.apps.googleusercontent.com',
   );
 
   runApp(

@@ -18,18 +18,10 @@ class GoogleCalendarService {
   static const _calendarScope =
       'https://www.googleapis.com/auth/calendar.events';
 
-  static bool _initialized = false;
-
-  static Future<void> _ensureInitialized() async {
-    if (_initialized) return;
-    await GoogleSignIn.instance.initialize(clientId: _clientId);
-    _initialized = true;
-  }
-
   /// Returns an authenticated CalendarApi, or null if the user declines.
+  /// GoogleSignIn.instance.initialize() must be called before this (done in main.dart).
   Future<gcal.CalendarApi?> _getApi() async {
     try {
-      await _ensureInitialized();
 
       // Try silent first
       GoogleSignInAccount? account =
