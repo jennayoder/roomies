@@ -12,13 +12,14 @@ class AuthService extends ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   User? _currentUser;
-  bool _isLoading = true;
 
   AuthService() {
-    // Listen to Firebase Auth state changes for the lifetime of this service.
+    // Read the synchronous cache immediately — avoids blank-screen delay on web.
+    _currentUser = _auth.currentUser;
+
+    // Then keep in sync with the async stream (handles sign-in/sign-out events).
     _auth.authStateChanges().listen((user) {
       _currentUser = user;
-      _isLoading = false;
       notifyListeners();
     });
   }
@@ -26,7 +27,8 @@ class AuthService extends ChangeNotifier {
   // ─── Getters ───────────────────────────────────────────────────────────────
 
   User? get currentUser => _currentUser;
-  bool get isLoading => _isLoading;
+  /// Always false now — we read the sync cache on construction.
+  bool get isLoading => false;
   bool get isSignedIn => _currentUser != null;
 
   // ─── Registration ──────────────────────────────────────────────────────────

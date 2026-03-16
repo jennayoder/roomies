@@ -143,14 +143,23 @@ class _CombinedChoresList extends StatelessWidget {
                 .where((c) => !c.isCompleted || c.isRepeatable || c.isWeeklyClaimable)
                 .toList();
 
+            final dailyChores = pendingChores
+                .where((c) => c.frequency == ChoreFrequency.daily)
+                .toList();
             final repeatableChores = pendingChores
-                .where((c) => c.isRepeatable && !c.isWeeklyClaimable)
+                .where((c) =>
+                    c.isRepeatable &&
+                    !c.isWeeklyClaimable &&
+                    c.frequency != ChoreFrequency.daily)
                 .toList();
             final weeklyChores = pendingChores
                 .where((c) => c.isWeeklyClaimable)
                 .toList();
             final regularChores = pendingChores
-                .where((c) => !c.isRepeatable && !c.isWeeklyClaimable)
+                .where((c) =>
+                    !c.isRepeatable &&
+                    !c.isWeeklyClaimable &&
+                    c.frequency != ChoreFrequency.daily)
                 .toList();
 
             final doneChores = allChores
@@ -179,93 +188,77 @@ class _CombinedChoresList extends StatelessWidget {
                     (!t.requiresApproval || t.approvedBy != null))
                 .toList();
 
+            Widget choreCard(Chore c) => _ChoreCard(
+                  chore: c,
+                  householdId: householdId,
+                  currentUid: currentUid,
+                  isOwner: isOwner,
+                  service: firestoreService,
+                );
+            Widget taskCard(t) => _TaskCard(
+                  task: t,
+                  householdId: householdId,
+                  currentUid: currentUid,
+                  isOwner: isOwner,
+                  service: taskService,
+                );
+
             return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              padding: const EdgeInsets.fromLTRB(0, 8, 0, 100),
               children: [
                 // 1. Awaiting Approval (owner only)
-                if (needsApproval.isNotEmpty && isOwner) ...[
-                  _sectionHeader(context, '⏳ Awaiting Approval'),
-                  const SizedBox(height: 8),
-                  ...needsApproval.map((t) => _TaskCard(
-                        task: t,
-                        householdId: householdId,
-                        currentUid: currentUid,
-                        isOwner: isOwner,
-                        service: taskService,
-                      )),
-                  const SizedBox(height: 16),
-                ],
-                // 2. Always Available (repeatable, not weekly)
-                if (repeatableChores.isNotEmpty) ...[
-                  _sectionHeader(context, '🔄 Always Available'),
-                  const SizedBox(height: 8),
-                  ...repeatableChores.map((c) => _ChoreCard(
-                        chore: c,
-                        householdId: householdId,
-                        currentUid: currentUid,
-                        isOwner: isOwner,
-                        service: firestoreService,
-                      )),
-                  const SizedBox(height: 16),
-                ],
+                if (needsApproval.isNotEmpty && isOwner)
+                  _ChoreSection(
+                    title: '⏳ Awaiting Approval',
+                    count: needsApproval.length,
+                    children: needsApproval.map(taskCard).toList(),
+                  ),
+                // 2. Daily
+                if (dailyChores.isNotEmpty)
+                  _ChoreSection(
+                    title: '🌅 Daily',
+                    count: dailyChores.length,
+                    children: dailyChores.map(choreCard).toList(),
+                  ),
                 // 3. Weekly claimable
-                if (weeklyChores.isNotEmpty) ...[
-                  _sectionHeader(context, '📅 Weekly'),
-                  const SizedBox(height: 8),
-                  ...weeklyChores.map((c) => _ChoreCard(
-                        chore: c,
-                        householdId: householdId,
-                        currentUid: currentUid,
-                        isOwner: isOwner,
-                        service: firestoreService,
-                      )),
-                  const SizedBox(height: 16),
-                ],
-                // 4. XP Chores (personal tasks pending)
-                if (pendingTasks.isNotEmpty) ...[
-                  _sectionHeader(context, '⭐ XP Chores'),
-                  const SizedBox(height: 8),
-                  ...pendingTasks.map((t) => _TaskCard(
-                        task: t,
-                        householdId: householdId,
-                        currentUid: currentUid,
-                        isOwner: isOwner,
-                        service: taskService,
-                      )),
-                  const SizedBox(height: 16),
-                ],
-                // 5. Regular one-time chores
-                if (regularChores.isNotEmpty) ...[
-                  _sectionHeader(context, 'To Do'),
-                  const SizedBox(height: 8),
-                  ...regularChores.map((c) => _ChoreCard(
-                        chore: c,
-                        householdId: householdId,
-                        currentUid: currentUid,
-                        isOwner: isOwner,
-                        service: firestoreService,
-                      )),
-                ],
-                // 6. Done
-                if (doneChores.isNotEmpty || doneTasks.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _sectionHeader(context, 'Done'),
-                  const SizedBox(height: 8),
-                  ...doneTasks.map((t) => _TaskCard(
-                        task: t,
-                        householdId: householdId,
-                        currentUid: currentUid,
-                        isOwner: isOwner,
-                        service: taskService,
-                      )),
-                  ...doneChores.map((c) => _ChoreCard(
-                        chore: c,
-                        householdId: householdId,
-                        currentUid: currentUid,
-                        isOwner: isOwner,
-                        service: firestoreService,
-                      )),
-                ],
+                if (weeklyChores.isNotEmpty)
+                  _ChoreSection(
+                    title: '📅 Weekly',
+                    count: weeklyChores.length,
+                    children: weeklyChores.map(choreCard).toList(),
+                  ),
+                // 4. Always Available (repeatable, non-daily)
+                if (repeatableChores.isNotEmpty)
+                  _ChoreSection(
+                    title: '🔄 Always Available',
+                    count: repeatableChores.length,
+                    children: repeatableChores.map(choreCard).toList(),
+                  ),
+                // 5. XP Chores
+                if (pendingTasks.isNotEmpty)
+                  _ChoreSection(
+                    title: '⭐ XP Chores',
+                    count: pendingTasks.length,
+                    children: pendingTasks.map(taskCard).toList(),
+                  ),
+                // 6. One-time To Do
+                if (regularChores.isNotEmpty)
+                  _ChoreSection(
+                    title: '📋 One-time',
+                    count: regularChores.length,
+                    children: regularChores.map(choreCard).toList(),
+                  ),
+                // 7. Done
+                if (doneChores.isNotEmpty || doneTasks.isNotEmpty)
+                  _ChoreSection(
+                    title: '✅ Done',
+                    count: doneChores.length + doneTasks.length,
+                    initiallyExpanded: false,
+                    children: [
+                      ...doneTasks.map(taskCard),
+                      ...doneChores.map(choreCard),
+                    ],
+                  ),
               ],
             );
           },
@@ -281,6 +274,93 @@ class _CombinedChoresList extends StatelessWidget {
           .textTheme
           .titleSmall
           ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    );
+  }
+}
+
+// ─── Collapsible chore section ────────────────────────────────────────────────
+
+class _ChoreSection extends StatefulWidget {
+  final String title;
+  final int count;
+  final List<Widget> children;
+  final bool initiallyExpanded;
+
+  const _ChoreSection({
+    required this.title,
+    required this.count,
+    required this.children,
+    this.initiallyExpanded = true,
+  });
+
+  @override
+  State<_ChoreSection> createState() => _ChoreSectionState();
+}
+
+class _ChoreSectionState extends State<_ChoreSection> {
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header row
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: textTheme.titleSmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                // Count badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${widget.count}',
+                    style: textTheme.labelSmall
+                        ?.copyWith(color: colors.onSurfaceVariant),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  _expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 20,
+                  color: colors.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Items
+        if (_expanded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Column(children: widget.children),
+          ),
+      ],
     );
   }
 }
