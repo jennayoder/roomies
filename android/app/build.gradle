@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    namespace "com.example.roomies"
+    namespace "com.roomies.app"
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 
@@ -23,9 +23,9 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.example.roomies"
+        applicationId "com.roomies.app"
         // You can update the following values to match your application needs.
-        minSdkVersion 21
+        minSdkVersion flutter.minSdkVersion
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutter.versionCode
         versionName flutter.versionName

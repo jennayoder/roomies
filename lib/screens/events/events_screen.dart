@@ -1,5 +1,3 @@
-import 'dart:html' as html;
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -12,6 +10,7 @@ import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../services/household_service.dart';
+import '../../utils/open_url.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_widget.dart';
 
@@ -337,17 +336,7 @@ class _EventCardState extends State<_EventCard> {
                 IconButton(
                   icon: const Icon(Icons.calendar_month_outlined),
                   tooltip: 'Add to Google Calendar',
-                  onPressed: () {
-                    final uri = _googleCalendarUri(widget.event);
-                    // Use anchor-click approach — bypasses iOS popup blocker
-                    final anchor = html.AnchorElement()
-                      ..href = uri.toString()
-                      ..target = '_blank'
-                      ..rel = 'noopener noreferrer';
-                    html.document.body?.append(anchor);
-                    anchor.click();
-                    anchor.remove();
-                  },
+                  onPressed: () => openUrl(_googleCalendarUri(widget.event)),
                 ),
                 if (widget.event.isUpcoming) ...[
                   const SizedBox(width: 4),
